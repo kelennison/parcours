@@ -1,19 +1,22 @@
-# Use a base image that includes R
-FROM rocker:4.4.1  # Change the R version as needed
+# Use a base image that includes Python
+FROM python:3.9-slim
 
 # Set the working directory
 WORKDIR /app
+
+# Install R and necessary packages
+RUN apt-get update && \
+    apt-get install -y r-base && \
+    apt-get clean
 
 # Copy your project files
 COPY . .
 
 # Install R packages
-COPY install.R /app/install.R
-RUN Rscript /app/install.R
+RUN Rscript install.R
 
-# Install Python and dependencies
-RUN apt-get update && apt-get install -y python3 python3-pip
-RUN pip3 install -r requirements.txt
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Command to run the Streamlit application
 CMD ["streamlit", "run", "Home.py"]
