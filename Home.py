@@ -122,22 +122,28 @@ if st.button('Run Analysis'):
 
 # Visualization 1 button (first R script)
 if st.button('Run Visualization'):
-    result_viz1 = subprocess.run([r"visualization1.R"], capture_output=True)
+    # Print current working directory for debugging
+    st.write("Current Working Directory:", os.getcwd())
+
+    result_viz1 = subprocess.run(["Rscript", "visualization1.R"], capture_output=True, text=True)
     if result_viz1.returncode == 0:
         st.success("Visualization 1 completed!")
         image = Image.open("viz1.png")  # Load the generated image
-        st.image(image, caption="Visualization 1", width=1000)  # Set the width to 600 pixels
+        st.image(image, caption="Visualization 1", width=1000)
     else:
         st.error("Error in Visualization 1.")
-        st.write(result_viz1.stderr.decode())
-
-    st.write()
-
-    result_viz2 = subprocess.run([r"visualization2.R"], capture_output=True)
+        st.write(result_viz1.stderr)
+     st.write()
+    result_viz2 = subprocess.run(["Rscript", "visualization2.R"], capture_output=True, text=True)
     if result_viz2.returncode == 0:
         st.success("Visualization 2 completed!")
         image = Image.open("viz2.png")  # Load the generated image
-        st.image(image, caption="Visualization 2", width=1000)  # Set the width to 600 pixels
+        st.image(image, caption="Visualization 2", width=1000)
     else:
         st.error("Error in Visualization 2.")
-        st.write(result_viz2.stderr.decode())
+        st.write(result_viz2.stderr)
+
+
+   
+
+ 
