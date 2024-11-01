@@ -10,11 +10,10 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Use the latest version of the Bioconductor image with ggtree
-docker pull quay.io/biocontainers/bioconductor-ggtree:<tag> [1]
-
-# Install additional R packages
-RUN R -e "install.packages(c('ape', 'tidyverse'), repos='https://cloud.r-project.org')"
+# Install Bioconductor packages and CRAN packages
+RUN R -e "install.packages('BiocManager', repos='https://cloud.r-project.org')" \
+    && R -e "BiocManager::install('ggtree')" \
+    && R -e "install.packages(c('ape', 'tidyverse'), repos='https://cloud.r-project.org')"
 
 
 # Install Python packages from requirements.txt
