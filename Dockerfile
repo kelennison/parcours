@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Use the latest version of the Bioconductor image with ggtree
-FROM quay.io/biocontainers/bioconductor-ggtree:3.14.0--r42hdfd78af_0
+docker pull quay.io/biocontainers/bioconductor-ggtree:<tag> [1]
 
 # Install additional R packages
 RUN R -e "install.packages(c('ape', 'tidyverse'), repos='https://cloud.r-project.org')"
