@@ -133,7 +133,8 @@ if st.button('Run Visualization'):
     else:
         st.error("Error in Visualization 1.")
         st.write(result_viz1.stderr)
-     st.write()
+
+    
     result_viz2 = subprocess.run(["Rscript", "visualization2.R"], capture_output=True, text=True)
     if result_viz2.returncode == 0:
         st.success("Visualization 2 completed!")
