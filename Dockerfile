@@ -1,27 +1,20 @@
-# Use the official Python image as a base
-FROM python:3.9-slim
+# Use a base image that includes R
+FROM rocker/r-ver:4.2.1  # Change the R version as needed
 
-# Set the working directory in the container
+# Install R packages
+COPY install.R /app/install.R
+RUN Rscript /app/install.R
+
+# Set the working directory
 WORKDIR /app
 
-# Copy the requirements.txt file into the container
-COPY requirements.txt .
+# Copy your project files
+COPY . /app
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the entire project into the container
-COPY . .
-
-# Install R (adjust as necessary for your environment)
-RUN apt-get update && apt-get install -y r-base
-
-# Install R dependencies (if needed)
-COPY install.R .
-RUN Rscript install.R
-
-# Expose the port that Streamlit runs on
-EXPOSE 8501
+RUN apt-get update && apt-get install -y python3 python3-pip
+RUN pip3 install -r requirements.txt
 
 # Command to run the Streamlit application
 CMD ["streamlit", "run", "Home.py"]
+
