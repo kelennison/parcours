@@ -10,13 +10,14 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install R packages from install.R
-COPY install.R /tmp/install.R
-RUN Rscript /tmp/install.R
+# Copy your project files
+COPY . .
 
-# Install Python packages from requirements.txt
-COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+# Install R packages
+RUN Rscript install.R
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Set the working directory
 WORKDIR /app
