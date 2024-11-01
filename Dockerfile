@@ -1,5 +1,5 @@
 # Use a base image that includes R
-FROM rocker/r-ver:4.4.1  # Change the R version as needed
+FROM rocker:4.4.1  # Change the R version as needed
 
 # Set the working directory
 WORKDIR /app
