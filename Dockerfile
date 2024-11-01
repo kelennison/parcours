@@ -10,11 +10,12 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Use the Bioconductor image with ggtree
-FROM quay.io/biocontainers/bioconductor-ggtree:latest
+# Use the latest version of the Bioconductor image with ggtree
+FROM quay.io/biocontainers/bioconductor-ggtree:3.14.0--r42hdfd78af_0
 
 # Install additional R packages
 RUN R -e "install.packages(c('ape', 'tidyverse'), repos='https://cloud.r-project.org')"
+
 
 # Install Python packages from requirements.txt
 COPY requirements.txt /tmp/requirements.txt
