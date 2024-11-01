@@ -10,9 +10,8 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install R packages from install.R
-COPY install.R /tmp/install.R
-RUN Rscript /tmp/install.R
+# Install required R packages
+RUN R -e "install.packages(c('ggtree', 'ape', 'tidyverse'), repos='http://cran.rstudio.com/')"
 
 # Install Python packages from requirements.txt
 COPY requirements.txt /tmp/requirements.txt
