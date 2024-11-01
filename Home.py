@@ -5,7 +5,7 @@ import os
 import zipfile
 import pandas as pd
 from PIL import Image
-
+import glob
 
 # Page setup
 st.set_page_config(layout="wide")
@@ -73,7 +73,7 @@ if st.button('Run Analysis'):
                 f.write(physical_file.getbuffer())
 
         # Define paths
-        parcours_script = r"parcours\parcours.py"
+        parcours_script = r"parcours.py"
         config_file_path = "config.csv"
 
         # Define the command to run the Python script with all required arguments
@@ -122,22 +122,29 @@ if st.button('Run Analysis'):
 
 # Visualization 1 button (first R script)
 if st.button('Run Visualization'):
-    result_viz1 = subprocess.run([r"parcours\visualization1.R"], capture_output=True)
+    # Print current working directory for debugging
+    st.write("Current Working Directory:", os.getcwd())
+
+    result_viz1 = subprocess.run(["Rscript", "visualization1.R"], capture_output=True, text=True)
     if result_viz1.returncode == 0:
         st.success("Visualization 1 completed!")
         image = Image.open("viz1.png")  # Load the generated image
-        st.image(image, caption="Visualization 1", width=1000)  # Set the width to 600 pixels
+        st.image(image, caption="Visualization 1", width=1000)
     else:
         st.error("Error in Visualization 1.")
-        st.write(result_viz1.stderr.decode())
+        st.write(result_viz1.stderr)
 
-    st.write()
-
-    result_viz2 = subprocess.run([r"parcours\visualization2.R"], capture_output=True)
+    
+    result_viz2 = subprocess.run(["Rscript", "visualization2.R"], capture_output=True, text=True)
     if result_viz2.returncode == 0:
         st.success("Visualization 2 completed!")
         image = Image.open("viz2.png")  # Load the generated image
-        st.image(image, caption="Visualization 2", width=1000)  # Set the width to 600 pixels
+        st.image(image, caption="Visualization 2", width=1000)
     else:
         st.error("Error in Visualization 2.")
-        st.write(result_viz2.stderr.decode())
+        st.write(result_viz2.stderr)
+
+
+   
+
+ 
