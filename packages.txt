@@ -2,5 +2,5 @@ r-base
 r-base-dev
 r-cran-tidyverse
 r-cran-ape
-r-cran-ggtree
-python3-distutils  # Adds distutils support
+r-cran-biocmanager
+
