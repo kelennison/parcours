@@ -1,5 +1,6 @@
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
+BiocManager::install(version = "3.20")
 
 BiocManager::install("ggtree")
 
