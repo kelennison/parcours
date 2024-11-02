@@ -1,24 +1,22 @@
-# Start with Ubuntu base image
-FROM ubuntu:20.04
+# Start with a Python base image
+FROM python:3.10-slim
 
 # Set R version and non-interactive frontend
 ENV R_VERSION=4.2.3 \
     DEBIAN_FRONTEND=noninteractive
 
-# Install dependencies for R and Python
-RUN apt-get update -qq && apt-get -y install --no-install-recommends \
-    ca-certificates \
+# Install system dependencies for R and other required tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gfortran \
     libreadline-dev \
-    xorg-dev \
     libbz2-dev \
     liblzma-dev \
     curl \
     libxml2-dev \
     libcairo2-dev \
     libsqlite3-dev \
-    libmariadbd-dev \
+    libmariadb-dev \
     libpq-dev \
     libssh2-1-dev \
     unixodbc-dev \
@@ -26,17 +24,13 @@ RUN apt-get update -qq && apt-get -y install --no-install-recommends \
     libssl-dev \
     libsodium-dev \
     wget \
-    python3.10 \
-    python3-pip \
-    python3-setuptools \
-    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Download and install R
-RUN wget -c https://cran.r-project.org/src/base/R-4/R-${R_VERSION}.tar.gz \
+RUN wget -q https://cran.r-project.org/src/base/R-4/R-${R_VERSION}.tar.gz \
     && tar -xf R-${R_VERSION}.tar.gz \
     && cd R-${R_VERSION} \
-    && ./configure \
+    && ./configure --with-x=no \
     && make -j$(nproc) \
     && make install \
     && cd .. \
