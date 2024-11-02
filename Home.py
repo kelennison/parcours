@@ -120,7 +120,7 @@ if st.button('Run Analysis'):
     else:
         st.error("Please upload all required files.")
 
-# Visualization 1 button (first R script)
+# Visualization button
 if st.button('Run Visualization'):
     # Print current working directory for debugging
     st.write("Current Working Directory:", os.getcwd())
@@ -129,10 +129,15 @@ if st.button('Run Visualization'):
     process_viz1 = subprocess.Popen(["Rscript", "visualization1.R"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     stdout_viz1, stderr_viz1 = process_viz1.communicate()
 
+    # Check if visualization1.R completed successfully
     if process_viz1.returncode == 0:
         st.success("Visualization 1 completed!")
-        image = Image.open("viz1.png")  # Load the generated image
-        st.image(image, caption="Visualization 1", width=1000)
+        try:
+            # Load the generated image
+            image = Image.open("viz1.png")
+            st.image(image, caption="Visualization 1", width=1000)
+        except FileNotFoundError:
+            st.error("Visualization 1 completed, but viz1.png not found.")
     else:
         st.error("Error in Visualization 1.")
         st.write(stderr_viz1)
@@ -141,15 +146,15 @@ if st.button('Run Visualization'):
     process_viz2 = subprocess.Popen(["Rscript", "visualization2.R"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     stdout_viz2, stderr_viz2 = process_viz2.communicate()
 
+    # Check if visualization2.R completed successfully
     if process_viz2.returncode == 0:
         st.success("Visualization 2 completed!")
-        image = Image.open("viz2.png")  # Load the generated image
-        st.image(image, caption="Visualization 2", width=1000)
+        try:
+            # Load the generated image
+            image = Image.open("viz2.png")
+            st.image(image, caption="Visualization 2", width=1000)
+        except FileNotFoundError:
+            st.error("Visualization 2 completed, but viz2.png not found.")
     else:
         st.error("Error in Visualization 2.")
         st.write(stderr_viz2)
-
-
-   
-
- 
