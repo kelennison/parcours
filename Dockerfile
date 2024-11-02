@@ -1,17 +1,21 @@
 # Start with a Python base image
 FROM python:3.10-slim
 
-# Install system dependencies and R
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     wget \
+    gnupg \
     software-properties-common \
     && rm -rf /var/lib/apt/lists/*
 
+# Add the CRAN GPG key
+RUN wget -qO- https://cloud.r-project.org/bin/linux/debian/marutter.gpg | apt-key add -
+
 # Add the CRAN repository for R
-RUN echo "deb https://cloud.r-project.org/bin/linux/debian bullseye-cran40/" >> /etc/apt/sources.list \
-    && wget -qO- https://cloud.r-project.org/bin/linux/debian/marutter.gpg | apt-key add - \
-    && apt-get update \
-    && apt-get install -y \
+RUN echo "deb https://cloud.r-project.org/bin/linux/debian bullseye-cran40/" > /etc/apt/sources.list.d/r.list
+
+# Update package lists and install R
+RUN apt-get update && apt-get install -y \
     r-base \
     r-base-dev \
     libcurl4-openssl-dev \
