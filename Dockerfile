@@ -2,7 +2,7 @@
 FROM python:3.10-slim
 
 # Set R version and non-interactive frontend
-ENV R_VERSION=4.2.3 \
+ENV R_VERSION=4.4.1 \
     DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies for R and other required tools
