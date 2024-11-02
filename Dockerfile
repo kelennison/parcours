@@ -1,16 +1,27 @@
-# Use a base image with Python and R 4.2
-FROM rocker/r-ver:4.2.0
+# Use Ubuntu as the base image
+FROM ubuntu:20.04
 
-# Install general dependencies
+# Set non-interactive mode for apt-get
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Update the package list and install dependencies
 RUN apt-get update && apt-get install -y \
     software-properties-common \
     wget \
-    unzip \
     curl \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    libxml2-dev \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Bioconductor and other R packages
+# Install R 4.2
+RUN apt-get update && apt-get install -y \
+    r-base \
+    r-base-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install R packages
 RUN R -e "install.packages('BiocManager', repos='https://cloud.r-project.org')" \
     && R -e "BiocManager::install('ggtree')" \
     && R -e "install.packages(c('ape', 'tidyverse'), repos='https://cloud.r-project.org')"
@@ -23,9 +34,9 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install additional Python packages if needed
+# Install additional Python packages
 COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 
 # Set the working directory
 WORKDIR /app
