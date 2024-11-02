@@ -120,31 +120,41 @@ if st.button('Run Analysis'):
     else:
         st.error("Please upload all required files.")
 
-# Visualization 1 button (first R script)
+# Visualization button
 if st.button('Run Visualization'):
     # Print current working directory for debugging
     st.write("Current Working Directory:", os.getcwd())
 
-    result_viz1 = subprocess.run(["Rscript", "visualization1.R"], capture_output=True, text=True)
-    if result_viz1.returncode == 0:
+    # Run visualization1.R with subprocess.Popen
+    process_viz1 = subprocess.Popen(["Rscript", "visualization1.R"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    stdout_viz1, stderr_viz1 = process_viz1.communicate()
+
+    # Check if visualization1.R completed successfully
+    if process_viz1.returncode == 0:
         st.success("Visualization 1 completed!")
-        image = Image.open("viz1.png")  # Load the generated image
-        st.image(image, caption="Visualization 1", width=1000)
+        try:
+            # Load the generated image
+            image = Image.open("viz1.png")
+            st.image(image, caption="Visualization 1", width=1000)
+        except FileNotFoundError:
+            st.error("Visualization 1 completed, but viz1.png not found.")
     else:
         st.error("Error in Visualization 1.")
-        st.write(result_viz1.stderr)
+        st.write(stderr_viz1)
 
-    
-    result_viz2 = subprocess.run(["Rscript", "visualization2.R"], capture_output=True, text=True)
-    if result_viz2.returncode == 0:
+    # Run visualization2.R with subprocess.Popen
+    process_viz2 = subprocess.Popen(["Rscript", "visualization2.R"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    stdout_viz2, stderr_viz2 = process_viz2.communicate()
+
+    # Check if visualization2.R completed successfully
+    if process_viz2.returncode == 0:
         st.success("Visualization 2 completed!")
-        image = Image.open("viz2.png")  # Load the generated image
-        st.image(image, caption="Visualization 2", width=1000)
+        try:
+            # Load the generated image
+            image = Image.open("viz2.png")
+            st.image(image, caption="Visualization 2", width=1000)
+        except FileNotFoundError:
+            st.error("Visualization 2 completed, but viz2.png not found.")
     else:
         st.error("Error in Visualization 2.")
-        st.write(result_viz2.stderr)
-
-
-   
-
- 
+        st.write(stderr_viz2)

@@ -1,7 +1,29 @@
+# Install BiocManager if it isn't already installed
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+# Set the Bioconductor version to 3.20
+BiocManager::install(version = "3.20")
+
+# Force install ggtree from Bioconductor
+BiocManager::install("ggtree", force = TRUE)
+
+# Force install tidyverse from CRAN if not already installed
+if (!require("tidyverse", quietly = TRUE))
+    install.packages("tidyverse", repos = "http://cran.us.r-project.org", dependencies = TRUE)
+
+# Force install ape from CRAN if not already installed
+if (!require("ape", quietly = TRUE))
+    install.packages("ape", repos = "http://cran.us.r-project.org", dependencies = TRUE)
+
+
+
 # Load necessary libraries
-library(ggtree)
-library(ape)
 library(tidyverse)
+library(ape)
+library(ggtree)
+
+
 
 # Load the CSV file with vocalizations and transitions
 pairwise_file <- "assets/pw_voc.csv"
