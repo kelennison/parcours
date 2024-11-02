@@ -23,6 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcurl4-openssl-dev \
     libssl-dev \
     libsodium-dev \
+    libharfbuzz-dev \
+    libfribidi-dev \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
@@ -37,16 +39,17 @@ RUN wget -q https://cran.r-project.org/src/base/R-4/R-${R_VERSION}.tar.gz \
     && rm -rf R-${R_VERSION} R-${R_VERSION}.tar.gz
 
 # Set the Rscript path explicitly
-ENV PATH="/usr/lib/R/bin:${PATH}"
+ENV PATH="/usr/local/bin/R:${PATH}"
 
 # Verify R installation
 RUN Rscript --version
 
-# Install Bioconductor and necessary CRAN packages
+# Install Bioconductor and necessary CRAN packages with forced installations
 RUN R -e "if (!requireNamespace('BiocManager', quietly = TRUE)) install.packages('BiocManager', repos='https://cloud.r-project.org'); \
     BiocManager::install(version = '3.20'); \
     BiocManager::install('ggtree', force = TRUE); \
-    install.packages('tidyverse', repos='https://cloud.r-project.org', dependencies=TRUE)"
+    install.packages('tidyverse', repos='https://cloud.r-project.org', dependencies=TRUE); \
+    install.packages('ape', repos='https://cloud.r-project.org', dependencies=TRUE)"
 
 # Copy and install Python requirements
 COPY requirements.txt /tmp/requirements.txt
