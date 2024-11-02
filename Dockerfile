@@ -4,12 +4,12 @@ FROM python:3.10-slim
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     wget \
-    gnupg \
+    gnupg2 \
     software-properties-common \
     && rm -rf /var/lib/apt/lists/*
 
-# Add the CRAN GPG key
-RUN wget -qO- https://cloud.r-project.org/bin/linux/debian/marutter.gpg | apt-key add -
+# Add the CRAN GPG key to the trusted keyring
+RUN wget -qO /etc/apt/trusted.gpg.d/marutter.gpg https://cloud.r-project.org/bin/linux/debian/marutter.gpg
 
 # Add the CRAN repository for R
 RUN echo "deb https://cloud.r-project.org/bin/linux/debian bullseye-cran40/" > /etc/apt/sources.list.d/r.list
