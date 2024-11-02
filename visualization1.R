@@ -5,9 +5,11 @@ BiocManager::install("ggtree")
 
 
 # Load necessary libraries
-library(ggtree)
-library(ape)
 library(tidyverse)
+library(ape)
+library(ggtree)
+
+
 
 # Load the CSV file with vocalizations and transitions
 pairwise_file <- "assets/pw_voc.csv"
