@@ -1,4 +1,4 @@
-r-base=4.4.1
+r-base
 r-base-dev
 r-cran-tidyverse
 r-cran-ape
