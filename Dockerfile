@@ -1,27 +1,46 @@
-# Start with a Python base image
-FROM python:3.10-slim
+# Start with Ubuntu base image
+FROM ubuntu:20.04
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    wget \
-    gnupg2 \
-    software-properties-common \
-    && rm -rf /var/lib/apt/lists/*
+# Set R version and non-interactive frontend
+ENV R_VERSION=4.2.3 \
+    DEBIAN_FRONTEND=noninteractive
 
-# Add the CRAN GPG key to the trusted keyring
-RUN wget -qO /etc/apt/trusted.gpg.d/marutter.gpg https://cloud.r-project.org/bin/linux/debian/marutter.gpg
-
-# Add the CRAN repository for R
-RUN echo "deb https://cloud.r-project.org/bin/linux/debian bullseye-cran40/" > /etc/apt/sources.list.d/r.list
-
-# Update package lists and install R
-RUN apt-get update && apt-get install -y \
-    r-base \
-    r-base-dev \
+# Install dependencies for R and Python
+RUN apt-get update -qq && apt-get -y install --no-install-recommends \
+    ca-certificates \
+    build-essential \
+    gfortran \
+    libreadline-dev \
+    xorg-dev \
+    libbz2-dev \
+    liblzma-dev \
+    curl \
+    libxml2-dev \
+    libcairo2-dev \
+    libsqlite3-dev \
+    libmariadbd-dev \
+    libpq-dev \
+    libssh2-1-dev \
+    unixodbc-dev \
     libcurl4-openssl-dev \
     libssl-dev \
-    libxml2-dev \
+    libsodium-dev \
+    wget \
+    python3.10 \
+    python3-pip \
+    python3-setuptools \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Download and install R
+RUN wget -c https://cran.r-project.org/src/base/R-4/R-${R_VERSION}.tar.gz \
+    && tar -xf R-${R_VERSION}.tar.gz \
+    && cd R-${R_VERSION} \
+    && ./configure \
+    && make -j$(nproc) \
+    && make install \
+    && cd .. \
+    && rm -rf R-${R_VERSION} R-${R_VERSION}.tar.gz
 
 # Set the Rscript path explicitly
 ENV PATH="/usr/lib/R/bin:${PATH}"
