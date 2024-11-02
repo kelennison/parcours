@@ -44,12 +44,18 @@ ENV PATH="/usr/local/bin/R:${PATH}"
 # Verify R installation
 RUN Rscript --version
 
-# Install Bioconductor and necessary CRAN packages with forced installations
-RUN R -e "if (!requireNamespace('BiocManager', quietly = TRUE)) install.packages('BiocManager', repos='https://cloud.r-project.org'); \
-    BiocManager::install(version = '3.20'); \
-    BiocManager::install('ggtree', force = TRUE); \
-    install.packages('tidyverse', repos='https://cloud.r-project.org', dependencies=TRUE); \
-    install.packages('ape', repos='https://cloud.r-project.org', dependencies=TRUE)"
+# Install littler for install2.r
+RUN R -e "install.packages('littler', repos='https://cloud.r-project.org')"
+# Link littler scripts to /usr/local/bin
+RUN ln -s /usr/local/lib/R/site-library/littler/bin/r /usr/local/bin/install2.r \
+    && ln -s /usr/local/lib/R/site-library/littler/bin/r /usr/local/bin/installBioc.r
+
+# Install Bioconductor and required packages with install2.r
+RUN install2.r --error --deps TRUE \
+    BiocManager \
+    tidyverse \
+    ape \
+    ggtree
 
 # Copy and install Python requirements
 COPY requirements.txt /tmp/requirements.txt
