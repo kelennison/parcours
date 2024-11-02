@@ -43,9 +43,10 @@ ENV PATH="/usr/lib/R/bin:${PATH}"
 RUN Rscript --version
 
 # Install Bioconductor and necessary CRAN packages
-RUN R -e "install.packages('BiocManager', repos='https://cloud.r-project.org')" \
-    && R -e "BiocManager::install('ggtree')" \
-    && R -e "install.packages(c('ape', 'tidyverse'), repos='https://cloud.r-project.org')"
+RUN R -e "if (!requireNamespace('BiocManager', quietly = TRUE)) install.packages('BiocManager', repos='https://cloud.r-project.org'); \
+    BiocManager::install(version = '3.20'); \
+    BiocManager::install('ggtree', force = TRUE); \
+    install.packages('tidyverse', repos='https://cloud.r-project.org', dependencies=TRUE)"
 
 # Copy and install Python requirements
 COPY requirements.txt /tmp/requirements.txt
