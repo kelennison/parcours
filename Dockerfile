@@ -5,7 +5,7 @@ FROM python:3.10-slim
 ENV R_VERSION=4.4.1 \
     DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies for R and other required tools
+# Install system dependencies for R, Python, and clir
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gfortran \
@@ -26,6 +26,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libharfbuzz-dev \
     libfribidi-dev \
     wget \
+    python3-pip \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Download and install R
@@ -38,24 +40,15 @@ RUN wget -q https://cran.r-project.org/src/base/R-4/R-${R_VERSION}.tar.gz \
     && cd .. \
     && rm -rf R-${R_VERSION} R-${R_VERSION}.tar.gz
 
-# Set the Rscript path explicitly
-ENV PATH="/usr/local/bin/R:${PATH}"
+# Install clir, the R package manager
+RUN R -e "install.packages('remotes', repos='https://cloud.r-project.org')" \
+    && R -e "remotes::install_github('dceoy/clir')"
+
+# Install BiocManager and required packages using clir
+RUN clir install BiocManager tidyverse ape ggtree
 
 # Verify R installation
 RUN Rscript --version
-
-# Install littler and verify install2.r availability
-RUN R -e "install.packages('littler', repos='https://cloud.r-project.org')"
-RUN ln -s /usr/local/lib/R/site-library/littler/bin/r /usr/local/bin/install2.r \
-    && ln -s /usr/local/lib/R/site-library/littler/bin/r /usr/local/bin/installBioc.r \
-    && install2.r --help || (echo 'install2.r not found'; exit 1)
-
-# Install Bioconductor and required packages with install2.r
-RUN install2.r --error --deps TRUE \
-    BiocManager \
-    tidyverse \
-    ape \
-    ggtree
 
 # Copy and install Python requirements
 COPY requirements.txt /tmp/requirements.txt
