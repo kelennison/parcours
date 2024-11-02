@@ -44,11 +44,11 @@ ENV PATH="/usr/local/bin/R:${PATH}"
 # Verify R installation
 RUN Rscript --version
 
-# Install littler for install2.r
+# Install littler and verify install2.r availability
 RUN R -e "install.packages('littler', repos='https://cloud.r-project.org')"
-# Link littler scripts to /usr/local/bin
 RUN ln -s /usr/local/lib/R/site-library/littler/bin/r /usr/local/bin/install2.r \
-    && ln -s /usr/local/lib/R/site-library/littler/bin/r /usr/local/bin/installBioc.r
+    && ln -s /usr/local/lib/R/site-library/littler/bin/r /usr/local/bin/installBioc.r \
+    && install2.r --help || (echo 'install2.r not found'; exit 1)
 
 # Install Bioconductor and required packages with install2.r
 RUN install2.r --error --deps TRUE \
