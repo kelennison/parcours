@@ -1,8 +1,12 @@
-if (!require("BiocManager", quietly = TRUE))
+if (!require("BiocManager", quietly = TRUE)) {
     install.packages("BiocManager")
+}
+
+# Set Bioconductor to version 3.20
 BiocManager::install(version = "3.20")
 
-BiocManager::install("ggtree")
+# Install ggtree with force to ensure it overwrites any partial installations
+BiocManager::install("ggtree", force = TRUE)
 
 # Load necessary libraries
 library(tidyverse)
