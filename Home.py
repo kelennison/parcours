@@ -123,48 +123,48 @@ if st.button('Run Analysis'):
     else:
         st.error("Please upload all required files.")
 
-# Visualization button with progress bar
+# Visualization button
 if st.button('Run Visualization'):
     # Print current working directory for debugging
     st.write("Current Working Directory:", os.getcwd())
 
+    # Initialize the progress bar for visualizations
+    progress = st.progress(0)  # Set up the progress bar
+
     # Run visualization1.R with subprocess.Popen
-    with st.progress(0) as progress:
-        process_viz1 = subprocess.Popen(["Rscript", "visualization1.R"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        stdout_viz1, stderr_viz1 = process_viz1.communicate()
+    progress.progress(25)  # Update progress to 25%
+    process_viz1 = subprocess.Popen(["Rscript", "visualization1.R"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    stdout_viz1, stderr_viz1 = process_viz1.communicate()
 
-        # Update progress for visualization 1
-        progress.progress(50)
+    # Check if visualization1.R completed successfully
+    if process_viz1.returncode == 0:
+        st.success("Visualization 1 completed!")
+        progress.progress(50)  # Update progress to 50%
+        try:
+            # Load the generated image
+            image = Image.open("images/viz1.png")
+            st.image(image, caption="Visualization 1", width=1000)
+        except FileNotFoundError:
+            st.error("Visualization 1 completed, but viz1.png not found.")
+    else:
+        st.error("Error in Visualization 1.")
+        st.write(stderr_viz1)
 
-        # Check if visualization1.R completed successfully
-        if process_viz1.returncode == 0:
-            st.success("Visualization 1 completed!")
-            try:
-                # Load the generated image
-                image = Image.open("images/viz1.png")
-                st.image(image, caption="Visualization 1", width=1000)
-            except FileNotFoundError:
-                st.error("Visualization 1 completed, but viz1.png not found.")
-        else:
-            st.error("Error in Visualization 1.")
-            st.write(stderr_viz1)
+    # Run visualization2.R with subprocess.Popen
+    progress.progress(75)  # Update progress to 75%
+    process_viz2 = subprocess.Popen(["Rscript", "visualization2.R"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    stdout_viz2, stderr_viz2 = process_viz2.communicate()
 
-        # Run visualization2.R with subprocess.Popen
-        process_viz2 = subprocess.Popen(["Rscript", "visualization2.R"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        stdout_viz2, stderr_viz2 = process_viz2.communicate()
-
-        # Update progress for visualization 2
-        progress.progress(100)
-
-        # Check if visualization2.R completed successfully
-        if process_viz2.returncode == 0:
-            st.success("Visualization 2 completed!")
-            try:
-                # Load the generated image
-                image = Image.open("images/viz2.png")
-                st.image(image, caption="Visualization 2", width=1000)
-            except FileNotFoundError:
-                st.error("Visualization 2 completed, but viz2.png not found.")
-        else:
-            st.error("Error in Visualization 2.")
-            st.write(stderr_viz2)
+    # Check if visualization2.R completed successfully
+    if process_viz2.returncode == 0:
+        st.success("Visualization 2 completed!")
+        progress.progress(100)  # Update progress to 100%
+        try:
+            # Load the generated image
+            image = Image.open("images/viz2.png")
+            st.image(image, caption="Visualization 2", width=1000)
+        except FileNotFoundError:
+            st.error("Visualization 2 completed, but viz2.png not found.")
+    else:
+        st.error("Error in Visualization 2.")
+        st.write(stderr_viz2)
