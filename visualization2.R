@@ -24,7 +24,7 @@ library(ggtree)
 
 
 # Load the CSV file with vocalizations and transitions
-pairwise_file <- "assets\\pw_phys.csv"
+pairwise_file <- "assets/pw_phys.csv"
 pairwise_df <- read_csv(pairwise_file)
 
 # Define the Newick file path
@@ -264,4 +264,4 @@ for (i in seq_along(nodes_to_color)) {
 
 # Print the updated plot
 print(tree_plot_new)
-ggsave("images\\viz2.png", plot = tree_plot_new, width = 12, height = 8, dpi = 300)
+ggsave("images/viz2.png", plot = tree_plot_new, width = 12, height = 8, dpi = 300)
