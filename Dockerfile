@@ -1,36 +1,44 @@
-# Start with a Python base image
-FROM python:3.10-slim
+# Start with the official Python base image
+FROM python:3.10
 
-# Set environment variables for non-interactive installations
+# Environment variables to prevent interaction during package installations
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install R from the Ubuntu repositories
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    r-base \
-    r-base-dev \
+# Update and install necessary system dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    software-properties-common \
+    dirmngr \
+    gnupg \
     libcurl4-openssl-dev \
     libssl-dev \
     libxml2-dev \
     libcairo2-dev \
-    libxt-dev \
     libtiff-dev \
     libjpeg-dev \
-    && rm -rf /var/lib/apt/lists/*
+    wget && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install R packages
-RUN R -e "install.packages('BiocManager', repos='https://cloud.r-project.org')" \
-    && R -e "BiocManager::install(c('ggtree'), update = FALSE, ask = FALSE)" \
-    && R -e "install.packages(c('tidyverse', 'ape'), repos='https://cloud.r-project.org')"
+# Add the R repository to get the latest R version
+RUN wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | gpg --dearmor > /etc/apt/trusted.gpg.d/cran.gpg && \
+    add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/" && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends r-base r-base-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install R packages from CRAN and Bioconductor
+RUN R -e "install.packages(c('BiocManager', 'tidyverse', 'ape'))" && \
+    R -e "BiocManager::install(c('ggtree', 'ragg'), version = '3.20')"
 
 # Install Python dependencies
-COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Set the working directory
+# Copy the application code
+COPY . /app
 WORKDIR /app
 
-# Copy the application code into the container
-COPY . /app
-
-# Set the command to run the Streamlit app
+# Set Streamlit to run the app
 CMD ["streamlit", "run", "Home.py"]
