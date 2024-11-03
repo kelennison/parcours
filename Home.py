@@ -134,7 +134,7 @@ if st.button('Run Visualization'):
         st.success("Visualization 1 completed!")
         try:
             # Load the generated image
-            image = Image.open("viz1.png")
+            image = Image.open("images/viz1.png")
             st.image(image, caption="Visualization 1", width=1000)
         except FileNotFoundError:
             st.error("Visualization 1 completed, but viz1.png not found.")
@@ -151,7 +151,7 @@ if st.button('Run Visualization'):
         st.success("Visualization 2 completed!")
         try:
             # Load the generated image
-            image = Image.open("viz2.png")
+            image = Image.open("images/viz2.png")
             st.image(image, caption="Visualization 2", width=1000)
         except FileNotFoundError:
             st.error("Visualization 2 completed, but viz2.png not found.")
