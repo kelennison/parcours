@@ -28,10 +28,10 @@ pairwise_file <- "assets/pw_phys.csv"
 pairwise_df <- read_csv(pairwise_file)
 
 # Define the Newick file path
-newick_file <- "(((((((Wild_Cat_Lineage,Leopard_Cat_Lineage)7,((Puma,Jaguarundi)19,Cheetah)18)6,Lynx_Lineage)5,Ocelot_Lineage)4,Caracal_Lineage)3,Bay_Cat_Lineage)2,Panthera_Lineage)1;"
+newick_string <- "(((((((Wild_Cat_Lineage,Leopard_Cat_Lineage)7,((Puma,Jaguarundi)19,Cheetah)18)6,Lynx_Lineage)5,Ocelot_Lineage)4,Caracal_Lineage)3,Bay_Cat_Lineage)2,Panthera_Lineage)1;"
 
 # Read the Newick tree from the file
-phylo_tree_new <- read.tree(newick_file)
+phylo_tree_new <- read.tree(text = newick_string)
 
 # Fortify the tree data to extract node information, including bootstrap values
 tree_data_new <- fortify(phylo_tree_new, ladderize = FALSE)
