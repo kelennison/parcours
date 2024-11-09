@@ -24,14 +24,14 @@ library(ggtree)
 
 
 # Load the CSV file with vocalizations and transitions
-pairwise_file <- "assets\\pw_phys.csv"
+pairwise_file <- "assets/pw_phys.csv"
 pairwise_df <- read_csv(pairwise_file)
 
 # Define the Newick file path
-newick_file <- "(((((((Wild_Cat_Lineage,Leopard_Cat_Lineage)7,((Puma,Jaguarundi)19,Cheetah)18)6,Lynx_Lineage)5,Ocelot_Lineage)4,Caracal_Lineage)3,Bay_Cat_Lineage)2,Panthera_Lineage)1;"
+newick_string <- "(((((((Wild_Cat_Lineage,Leopard_Cat_Lineage)7,((Puma,Jaguarundi)19,Cheetah)18)6,Lynx_Lineage)5,Ocelot_Lineage)4,Caracal_Lineage)3,Bay_Cat_Lineage)2,Panthera_Lineage)1;"
 
 # Read the Newick tree from the file
-phylo_tree_new <- read.tree(newick_file)
+phylo_tree_new <- read.tree(text = newick_string)
 
 # Fortify the tree data to extract node information, including bootstrap values
 tree_data_new <- fortify(phylo_tree_new, ladderize = FALSE)
@@ -264,4 +264,4 @@ for (i in seq_along(nodes_to_color)) {
 
 # Print the updated plot
 print(tree_plot_new)
-ggsave("images\\viz2.png", plot = tree_plot_new, width = 12, height = 8, dpi = 300)
+ggsave("images/viz2.png", plot = tree_plot_new, width = 12, height = 8, dpi = 300)

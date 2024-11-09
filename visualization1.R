@@ -108,5 +108,5 @@ tree_plot <- tree_plot +
 print(tree_plot)
 
 
-ggsave("images\\viz1.png", plot = tree_plot, width = 10, height = 8, dpi = 300)
+ggsave("images/viz1.png", plot = tree_plot, width = 10, height = 8, dpi = 300)
 
