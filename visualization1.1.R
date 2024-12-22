@@ -85,5 +85,5 @@ tree_plot <- tree_plot +
   scale_y_reverse(limits = c(max_y + margin_y, min_y - margin_y)) # maintain y-axis reversal and add limits
 
 # Print the updated plot
-print(tree_plot_new)
+print(tree_plot)
 ggsave("images/viz1.png", plot = tree_plot_new, width = 12, height = 8, dpi = 300)
