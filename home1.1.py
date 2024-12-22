@@ -1,63 +1,82 @@
+from ete3 import Tree
 import streamlit as st
 import subprocess
 import sys
 import os
 import zipfile
 import pandas as pd
-from PIL import Image
 import glob
-import time
+from PIL import Image
+from ete3 import Tree
+import pandas as pd
+import os
+import tempfile
+
 
 # Page setup
 st.set_page_config(layout="wide")
 st.title('Parcours: Correlated Evolution Analysis')
 
 # Use local CSS
-
-
 def local_css(file_name):
     with open(file_name) as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
 
 local_css("style/style.css")  # Load your existing CSS file
 
 # File upload widgets for required files
 st.write('Upload your phylogenetic tree, character state data, and config file:')
-config_file = st.file_uploader(
-    "Choose config file for the analysis", type=["csv"])
+config_file = st.file_uploader("Choose config file for the analysis", type=["csv"])
 extant_file = st.file_uploader("Choose extant state file", type=["csv"])
-tree_file = st.file_uploader(
-    "Choose phylogenetic tree file", type=["nh", "tree"])
+tree_file = st.file_uploader("Choose phylogenetic tree file", type=["nh", "tree"])
 
-# Dropdown for selecting optional files to upload
-optional_files = st.multiselect(
-    "Select optional files to upload (not required for analysis):",
-    options=["Cost File", "Physical Trait File"]
-)
+# Save config and tree files to temporary files and store paths in session state
+if config_file is not None:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
+        tmp.write(config_file.getvalue())
+        st.session_state.config_file_path = tmp.name  # Store path in session state
 
-# Display the appropriate upload fields based on selection
+if tree_file is not None:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".nh") as tmp:
+        tmp.write(tree_file.getvalue())
+        st.session_state.tree_file_path = tmp.name  # Store path in session state
+
+# Initialize optional files
 cost_file = None
 physical_file = None
 
-if "Cost File" in optional_files:
-    cost_file = st.file_uploader("Upload cost file", type=["csv"])
-if "Physical Trait File" in optional_files:
-    physical_file = st.file_uploader(
-        "Upload physical trait file", type=["csv"])
+# Function to check if specific files are referenced in the config file
+
+
+def check_file_in_config(file_path, keyword):
+    if file_path:
+        config_data = pd.read_csv(file_path)
+        # Flatten data to check for the presence of keywords
+        if keyword in config_data.to_string().lower():
+            return True
+    return False
+
+
+# Automatically set optional files based on config file content
+if config_file:
+    if check_file_in_config(st.session_state.config_file_path, 'cost.csv'):
+        st.write(
+            "Cost file is mentioned in the config file, automatically adding it to the list.")
+        cost_file = st.file_uploader("Upload cost file", type=["csv"])
+    if check_file_in_config(st.session_state.config_file_path, 'physical.csv'):
+        st.write(
+            "Physical trait file is mentioned in the config file, automatically adding it to the list.")
+        physical_file = st.file_uploader(
+            "Upload physical trait file", type=["csv"])
 
 # Set the Python interpreter path
 python_path = sys.executable
 
 # Function to clear output files
-
-
 def clear_output_files():
-    files_to_remove = glob.glob(
-        "*.csv") + glob.glob("*.nexus") + glob.glob("solutions/*")
+    files_to_remove = glob.glob("*.csv") + glob.glob("*.nexus") + glob.glob("solutions/*")
     for file_path in files_to_remove:
         os.remove(file_path)
-
 
 # Button to run analysis with a spinner
 if st.button('Run Analysis'):
@@ -87,8 +106,7 @@ if st.button('Run Analysis'):
         config_file_path = "config.csv"
 
         # Define the command to run the Python script with all required arguments
-        command = [python_path, parcours_script, "-f",
-                   config_file_path, "-t", "tree.nh", "-e", "extant.csv"]
+        command = [python_path, parcours_script, "-f", config_file_path, "-t", "tree.nh", "-e", "extant.csv"]
 
         # Add cost and physical files to the command with separate flags
         if cost_file:
@@ -106,11 +124,9 @@ if st.button('Run Analysis'):
             st.write(result.stdout)
 
             # Collect output files and check existence before adding them to the ZIP
-            output_files = ["output.csv",
-                            "pairwise.csv", "unit.csv", "solns.csv"]
+            output_files = ["output.csv", "pairwise.csv", "unit.csv", "solns.csv"]
             output_dir = "solutions"
-            output_files.extend([os.path.join(output_dir, f) for f in os.listdir(
-                output_dir) if os.path.isfile(os.path.join(output_dir, f))])
+            output_files.extend([os.path.join(output_dir, f) for f in os.listdir(output_dir) if os.path.isfile(os.path.join(output_dir, f))])
 
             # Zip the output files
             zip_path = "analysis_results.zip"
@@ -146,8 +162,7 @@ if st.button('Run Visualization'):
 
     # Run visualization1.R with subprocess.Popen
     progress.progress(25)  # Update progress to 25%
-    process_viz1 = subprocess.Popen(
-        ["Rscript", "visualization1.R"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    process_viz1 = subprocess.Popen(["Rscript", "visualization1.R"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     stdout_viz1, stderr_viz1 = process_viz1.communicate()
 
     # Check if visualization1.R completed successfully
@@ -166,8 +181,7 @@ if st.button('Run Visualization'):
 
     # Run visualization2.R with subprocess.Popen
     progress.progress(75)  # Update progress to 75%
-    process_viz2 = subprocess.Popen(
-        ["Rscript", "visualization2.R"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    process_viz2 = subprocess.Popen(["Rscript", "visualization2.R"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     stdout_viz2, stderr_viz2 = process_viz2.communicate()
 
     # Check if visualization2.R completed successfully

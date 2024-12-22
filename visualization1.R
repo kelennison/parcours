@@ -33,13 +33,13 @@ pairwise_df <- read_csv(pairwise_file)
 # Assuming the correct column names are 'Char_1', 'Char_2', 'Transition_1', and 'Transition_2'
 
 # Define the Newick string
-newick_string <- "(Felinae, ((((Lion,Leopard)36,Jaguar)35,(Tiger,Snow_Leopard))34,Clouded_Leopard)33)1;"
+newick_string <- "((((Ple:1,Ppa:1)36:1,Pon:1)35:1,(Pti:1,Pun:1)37:1)34:1,Nne:1)33:1;"
 
 # Read the Newick string into a phylogenetic tree object
 phylo_tree <- read.tree(text = newick_string)
 
 # Fortify the tree data to extract node information, including bootstrap values
-tree_data <- fortify(phylo_tree)
+tree_data <- fortify(phylo_tree, ladderize = FALSE)
 
 # Annotate Char_1 and Char_2 with (-) or (+) based on transitions
 pairwise_df <- pairwise_df %>%
@@ -108,5 +108,4 @@ tree_plot <- tree_plot +
 print(tree_plot)
 
 
-ggsave("images/viz1.png", plot = tree_plot, width = 10, height = 8, dpi = 300)
 

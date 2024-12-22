@@ -41,18 +41,18 @@ pairwise_df <- pairwise_df %>%
   mutate(C_Map_1 = str_extract_all(C_Map_1, "(?<=->)[\\w]+"),
          C_Map_2 = str_extract_all(C_Map_2, "(?<=->)[\\w]+"))
 
-# Annotate Char_1 and Char_2 with transitions
+# Annotate Char_1 and Char_2 with transitions, replacing "->" with "to"
 pairwise_df <- pairwise_df %>%
-  mutate(Char_1_annotated = case_when(
-    Transition_1 == "2->3" ~ paste0(Char_1, " 2 to 3"),
-    Transition_1 == "1->3" ~ paste0(Char_1, " 1 to 3"),
-    TRUE ~ Char_1
-  ),
-  Char_2_annotated = case_when(
-    Transition_2 == "2->3" ~ paste0(Char_2, " 2 to 3"),
-    Transition_2 == "1->3" ~ paste0(Char_2, " 1 to 3"),
-    TRUE ~ Char_2
-  ))
+  mutate(
+    Char_1_annotated = case_when(
+      grepl("->", Transition_1) ~ paste0(Char_1, " ", gsub("->", " to ", Transition_1)),
+      TRUE ~ Char_1
+    ),
+    Char_2_annotated = case_when(
+      grepl("->", Transition_2) ~ paste0(Char_2, " ", gsub("->", " to ", Transition_2)),
+      TRUE ~ Char_2
+    )
+  )
 
 # Plot the tree
 
