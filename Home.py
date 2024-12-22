@@ -285,31 +285,22 @@ def preserve_nodes_and_find_subtree(tree, annotated_leaves, node_threshold=30):
             "At least two annotated nodes must be found in the tree.")
 
     lca = tree.get_common_ancestor(*node_objects)
-    print(f"LCA of nodes {annotated_leaves}: {lca.name}")
 
     # Step 3: Expand the LCA subtree to include all explicitly preserved nodes
     expanded_nodes = set(lca.iter_descendants()) | nodes_to_preserve
 
     # Step 4: Prune based on explicitly preserved nodes
-    print(f"Nodes to preserve: {[node.name for node in nodes_to_preserve]}")
-    print(f"Expanded nodes: {[node.name for node in expanded_nodes]}")
-
     tree.prune([node.name for node in expanded_nodes if node.name],
                preserve_branch_length=True)
 
     # Count nodes in the modified tree after pruning
     total_nodes_after_pruning = len(list(tree.traverse()))
-    print(f"Total nodes in the modified tree after pruning: {
-          total_nodes_after_pruning}")
 
     # Step 5: Check if aggressive pruning is needed based on the modified tree size
     if total_nodes_after_pruning > node_threshold:
-        print("Applying aggressive pruning...")
         tree = collapse_irrelevant_nodes_1(
             tree, nodes_to_preserve)  # Pass only preserved nodes
         total_nodes_after_collapse = len(list(tree.traverse()))
-        print(f"Total nodes after aggressive pruning: {
-              total_nodes_after_collapse}")
     else:
         print("No aggressive pruning applied")
 
@@ -319,8 +310,6 @@ def preserve_nodes_and_find_subtree(tree, annotated_leaves, node_threshold=30):
 
 
 def collapse_irrelevant_nodes_1(tree, nodes_to_preserve):
-    print("Collapsing irrelevant nodes...")
-
     # Convert preserved nodes to a set for faster lookup
     preserved_names = {n.name for n in nodes_to_preserve}
 
@@ -344,8 +333,6 @@ def create_subtree_and_save(df, selected_rows_indices, tree_file_path, node_thre
     selected_subtree = df.loc[selected_rows_indices]
 
     if total_tree_nodes <= node_threshold:
-        print(f"Tree has {total_tree_nodes} nodes, which is <= {
-              node_threshold}. Returning the entire tree.")
         subtree_newick = tree.write(format=1)  # Use format=1 to retain labels
     else:
         if len(selected_subtree) == 1:
@@ -354,7 +341,6 @@ def create_subtree_and_save(df, selected_rows_indices, tree_file_path, node_thre
         annotation_str = " -> ".join(f"{row['C_Map_1']} ; {
                                      row['C_Map_2']}" for _, row in selected_subtree.iterrows())
         annotations = annotation_str.split(';')
-        print(f"Annotations: {annotations}")
 
         nodes = []
         for annotation in annotations:
@@ -370,7 +356,6 @@ def create_subtree_and_save(df, selected_rows_indices, tree_file_path, node_thre
         # If only one node, extract the subtree for that node
         if len(unique_nodes) == 1:
             subtree = tree & unique_nodes[0]
-            print(f"Extracted subtree for single node: {unique_nodes[0]}")
             # Convert subtree to Newick format string
             # Retain internal node labels
             subtree_newick = subtree.write(format=1)
@@ -387,9 +372,7 @@ def create_subtree_and_save(df, selected_rows_indices, tree_file_path, node_thre
 
                 # Convert the collapsed tree to Newick format
                 subtree_newick = collapsed_tree.write(
-                    format=1)  # Retain internal node labels
-                print(f"Extracted collapsed subtree for leaf nodes: {
-                      leaf_nodes}")
+                    format=1)  # Retain internal node label
             else:
                 # Use the new function to preserve and collapse the relevant nodes
                 subtree_newick = preserve_nodes_and_find_subtree(
@@ -410,19 +393,10 @@ def create_subtree_and_save(df, selected_rows_indices, tree_file_path, node_thre
     return temp_subtree_file.name, temp_pairwise_file.name
 
 # Function to inspect the CSV files created by create_subtree_and_save
-
-
 def inspect_csv_files(subtree_file, pairwise_file):
     # Read the CSV files into DataFrames
     subtree_df = pd.read_csv(subtree_file)
     pairwise_df = pd.read_csv(pairwise_file)
-
-    # Display the first few rows of each DataFrame to inspect the contents
-    print("Subtree CSV File Contents:")
-    print(subtree_df.head())  # Display first 5 rows of the subtree file
-
-    print("\nPairwise CSV File Contents:")
-    print(pairwise_df.head())  # Display first 5 rows of the pairwise file
 
 
 # Track analysis completion status in session state
@@ -478,14 +452,8 @@ if st.session_state.analysis_completed:
     # Ensure `selected_rows_indices` contains unique values and no multidimensional structure
     selected_rows_indices = list(set(selected_rows_indices))
 
-    # Debug print to check selected rows
-    print(f"Selected rows indices: {selected_rows_indices}")
-
     # Ensure `selected_rows_indices` corresponds to actual row indices in the dataframe
     selected_subtree = st.session_state.df.loc[selected_rows_indices]
-
-    # Debug: Check the rows being passed
-    print(f"Selected DataFrame rows:\n{selected_subtree}")
 
     # Create and save subtree and pairwise files
     temp_subtree_file, temp_pairwise_file = create_subtree_and_save(
