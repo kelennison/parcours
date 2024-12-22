@@ -338,8 +338,8 @@ def create_subtree_and_save(df, selected_rows_indices, tree_file_path, node_thre
         if len(selected_subtree) == 1:
             selected_subtree = pd.DataFrame([selected_subtree.iloc[0]])
 
-        annotation_str = " -> ".join(f"{row['C_Map_1']} ; {
-                                     row['C_Map_2']}" for _, row in selected_subtree.iterrows())
+        
+        annotation_str = " -> ".join(f"{row['C_Map_1']} ; {row['C_Map_2']}" for _, row in selected_subtree.iterrows())
         annotations = annotation_str.split(';')
 
         nodes = []
@@ -393,6 +393,8 @@ def create_subtree_and_save(df, selected_rows_indices, tree_file_path, node_thre
     return temp_subtree_file.name, temp_pairwise_file.name
 
 # Function to inspect the CSV files created by create_subtree_and_save
+
+
 def inspect_csv_files(subtree_file, pairwise_file):
     # Read the CSV files into DataFrames
     subtree_df = pd.read_csv(subtree_file)
