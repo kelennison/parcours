@@ -262,6 +262,21 @@ for (i in seq_along(nodes_to_color)) {
 
 
 
-# Print the updated plot
-print(tree_plot_new)
-ggsave("images/viz2.png", plot = tree_plot_new, width = 12, height = 8, dpi = 300)
+# Install BiocManager if it isn't already installed
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+# Set the Bioconductor version to 3.20
+BiocManager::install(version = "3.20")
+
+# Force install ggtree from Bioconductor
+BiocManager::install("ggtree", force = TRUE)
+
+# Force install tidyverse from CRAN if not already installed
+if (!require("tidyverse", quietly = TRUE))
+    install.packages("tidyverse", repos = "http://cran.us.r-project.org", dependencies = TRUE)
+
+# Force install ape from CRAN if not already installed
+if (!require("ape", quietly = TRUE))
+    install.packages("ape", repos = "http://cran.us.r-project.org", dependencies = TRUE)
+

@@ -1,3 +1,22 @@
+# Install BiocManager if it isn't already installed
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+# Set the Bioconductor version to 3.20
+BiocManager::install(version = "3.20")
+
+# Force install ggtree from Bioconductor
+BiocManager::install("ggtree", force = TRUE)
+
+# Force install tidyverse from CRAN if not already installed
+if (!require("tidyverse", quietly = TRUE))
+    install.packages("tidyverse", repos = "http://cran.us.r-project.org", dependencies = TRUE)
+
+# Force install ape from CRAN if not already installed
+if (!require("ape", quietly = TRUE))
+    install.packages("ape", repos = "http://cran.us.r-project.org", dependencies = TRUE
+
+
 # Load required packages
 library(tidyverse)
 library(ape)
@@ -84,8 +103,6 @@ tree_plot <- tree_plot +
   scale_x_continuous(limits = c(min_x - margin_x, max_x + margin_x)) +
   scale_y_reverse(limits = c(max_y + margin_y, min_y - margin_y)) # maintain y-axis reversal and add limits
 
-# Print the plot with improved annotations
-print(tree_plot)
-
-
-ggsave("C:\\Users\\USER\\OneDrive\\Documents\\Hello World\\parcours-main\\viz1.png", plot = tree_plot, width = 10, height = 8, dpi = 300)
+# Print the updated plot
+print(tree_plot_new)
+ggsave("images/viz1.png", plot = tree_plot_new, width = 12, height = 8, dpi = 300)
