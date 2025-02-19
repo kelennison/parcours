@@ -88,8 +88,8 @@ tree_file = st.file_uploader(
     "Choose phylogenetic tree file", type=["nh", "tree"])
 
 # Use hard-coded paths for config and physical files
-config_file_path = "config1.csv"
-fixed_physical_file_path = "physical.csv"
+config_file_path = r"config1.csv"
+fixed_physical_file_path = r"physical.csv"
 
 
 # Store it in the session state
