@@ -88,8 +88,9 @@ tree_file = st.file_uploader(
     "Choose phylogenetic tree file", type=["nh", "tree"])
 
 # Use hard-coded paths for config and physical files
-config_file_path = r"config1.csv"
-fixed_physical_file_path = r"physical.csv"
+import os
+config_file_path = os.path.join(os.path.dirname(__file__), "config1.csv")
+fixed_physical_file_path = os.path.join(os.path.dirname(__file__), "physical.csv")
 
 
 # Store it in the session state
@@ -151,8 +152,8 @@ if st.button('Run Analysis'):
         if cost_file:
             with open("cost.csv", "wb") as f:
                 f.write(cost_file.getbuffer())
-         # Check if the fixed physical file exists
-        fixed_physical_file_path = r"physical.csv"
+       
+        fixed_physical_file_path = os.path.join(os.path.dirname(__file__), "physical.csv")
         if not os.path.exists(fixed_physical_file_path):
             st.error(f"Physical file not found at: {fixed_physical_file_path}")
         else:
@@ -163,7 +164,7 @@ if st.button('Run Analysis'):
         # Define paths
         parcours_script = r"parcours.py"
         # Use hard-coded paths for config and physical files
-        config_file_path = r"config1.csv"
+        config_file_path = os.path.join(os.path.dirname(__file__), "config1.csv")
 
         command = [python_path, parcours_script,
                        "-f", config_file_path,
