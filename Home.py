@@ -88,7 +88,7 @@ tree_file = st.file_uploader(
     "Choose phylogenetic tree file", type=["nh", "tree"])
 
 # Use hard-coded paths for config and physical files
-config_file_path = r"assets\config1.csv"
+config_file_path = r"config1.csv"
 fixed_physical_file_path = r"physical.csv"
 
 
@@ -165,14 +165,12 @@ if st.button('Run Analysis'):
         command = [python_path, parcours_script,
                        "-f", config_file_path,
                        "-t", "tree.nh",
-                       "-e", "extant.csv"]
+                       "-e", "extant.csv","-p", "pairwise.csv"]
 
             # Include optional cost file if provided
         if cost_file:
             command += ["-c", "cost.csv"]
 
-            # Pass the physical file now in the working directory
-        command += ["-p", "pairwise.csv"]
 
         # Run analysis with spinner
         with st.spinner("Running analysis..."):
