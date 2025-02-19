@@ -152,6 +152,7 @@ if st.button('Run Analysis'):
             with open("cost.csv", "wb") as f:
                 f.write(cost_file.getbuffer())
          # Check if the fixed physical file exists
+        fixed_physical_file_path = r"physical.csv"
         if not os.path.exists(fixed_physical_file_path):
             st.error(f"Physical file not found at: {fixed_physical_file_path}")
         else:
@@ -161,6 +162,8 @@ if st.button('Run Analysis'):
 
         # Define paths
         parcours_script = r"parcours.py"
+        # Use hard-coded paths for config and physical files
+        config_file_path = r"config1.csv"
 
         command = [python_path, parcours_script,
                        "-f", config_file_path,
