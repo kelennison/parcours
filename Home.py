@@ -87,11 +87,9 @@ extant_file = st.file_uploader("Choose extant state file", type=["csv"])
 tree_file = st.file_uploader(
     "Choose phylogenetic tree file", type=["nh", "tree"])
 
-# Use hard-coded paths for config and physical files
-import os
-config_file_path = os.path.join(os.path.dirname(__file__), "config1.csv")
-fixed_physical_file_path = os.path.join(os.path.dirname(__file__), "physical.csv")
-
+# Update paths to point to assets/ folder
+config_file_path = os.path.join("assets", "config1.csv")
+fixed_physical_file_path = os.path.join("assets", "physical.csv")
 
 # Store it in the session state
 st.session_state["config_file_path"] = config_file_path
@@ -152,20 +150,21 @@ if st.button('Run Analysis'):
         if cost_file:
             with open("cost.csv", "wb") as f:
                 f.write(cost_file.getbuffer())
-       
-        fixed_physical_file_path = os.path.join(os.path.dirname(__file__), "physical.csv")
+    
+         # Handle config and physical files from assets/
+        if not os.path.exists(config_file_path):
+            st.error(f"Config file not found at: {config_file_path}")
+        else:
+            shutil.copy(config_file_path, "config1.csv")  
         if not os.path.exists(fixed_physical_file_path):
             st.error(f"Physical file not found at: {fixed_physical_file_path}")
         else:
-            # Copy the fixed physical file to the working directory as 'physical.csv'
-            shutil.copy(fixed_physical_file_path, "physical.csv")
-            
+            # Copy from assets/ to working directory
+            shutil.copy(fixed_physical_file_path, "physical.csv")        
 
-        # Define paths
+           # Define paths
         parcours_script = r"parcours.py"
-        # Use hard-coded paths for config and physical files
-        config_file_path = os.path.join(os.path.dirname(__file__), "config1.csv")
-
+       
         command = [python_path, parcours_script,
                        "-f", config_file_path,
                        "-t", "tree.nh",
