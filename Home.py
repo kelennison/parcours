@@ -11,14 +11,15 @@ from ete3 import Tree
 import pandas as pd
 import os
 import tempfile
+import ete3
+import shutil  # Import shutil for file copying
+
 
 # Page setup
 st.set_page_config(layout="wide")
 st.title('Parcours: Correlated Evolution Analysis')
 
 # Use local CSS
-
-
 def local_css(file_name):
     with open(file_name) as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
@@ -35,7 +36,7 @@ def wrangle_pairwise_data(tree_path):
         df = pd.read_csv(pairwise_path)
 
         # Filter rows where Correlation is greater than or equal to 0.5
-        df = df[df['Correlation'] >= 0.5]
+        #df = df[df['Correlation'] >= 0.5]
 
         # Exclude rows where Transition_2 is "unknown" or Char_1 and Char_2 contain "BodyLength"
         df = df[
@@ -81,18 +82,18 @@ def wrangle_pairwise_data(tree_path):
 
 
 # File upload widgets for required files
-st.write('Upload your phylogenetic tree, character state data, and config file:')
-config_file = st.file_uploader(
-    "Choose config file for the analysis", type=["csv"])
+st.write('Upload your phylogenetic tree and character state data:')
 extant_file = st.file_uploader("Choose extant state file", type=["csv"])
 tree_file = st.file_uploader(
     "Choose phylogenetic tree file", type=["nh", "tree"])
 
-# Save config and tree files to temporary files and store paths in session state
-if config_file is not None:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
-        tmp.write(config_file.getvalue())
-        st.session_state.config_file_path = tmp.name  # Store path in session state
+# Use hard-coded paths for config and physical files
+config_file_path = r"assets\config1.csv"
+fixed_physical_file_path = r"physical.csv"
+
+
+# Store it in the session state
+st.session_state["config_file_path"] = config_file_path
 
 if tree_file is not None:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".nh") as tmp:
@@ -101,11 +102,9 @@ if tree_file is not None:
 
 # Initialize optional files
 cost_file = None
-physical_file = None
+
 
 # Function to check if specific files are referenced in the config file
-
-
 def check_file_in_config(file_path, keyword):
     if file_path:
         config_data = pd.read_csv(file_path)
@@ -115,24 +114,16 @@ def check_file_in_config(file_path, keyword):
     return False
 
 
-# Automatically set optional files based on config file content
-if config_file:
-    if check_file_in_config(st.session_state.config_file_path, 'cost.csv'):
-        st.write(
-            "Cost file is mentioned in the config file, automatically adding it to the list.")
+if os.path.exists(config_file_path):
+    if check_file_in_config(config_file_path, 'cost.csv'):
+        st.write("Cost file is mentioned in the config file, automatically adding it to the list.")
         cost_file = st.file_uploader("Upload cost file", type=["csv"])
-    if check_file_in_config(st.session_state.config_file_path, 'physical.csv'):
-        st.write(
-            "Physical trait file is mentioned in the config file, automatically adding it to the list.")
-        physical_file = st.file_uploader(
-            "Upload physical trait file", type=["csv"])
+
 
 # Set the Python interpreter path
 python_path = sys.executable
 
 # Function to clear output files
-
-
 def clear_output_files():
     files_to_remove = glob.glob(
         "*.csv") + glob.glob("*.nexus") + glob.glob("solutions/*")
@@ -148,39 +139,40 @@ wrangled_pairwise_path = None
 # Button to run analysis with a spinner
 if st.button('Run Analysis'):
     # Ensure all required files are present
-    if extant_file and tree_file and config_file:
+    if extant_file and tree_file:
         # Clear previous output files
         clear_output_files()
 
-        # Save required files
-        with open("config.csv", "wb") as f:
-            f.write(config_file.getbuffer())
         with open("extant.csv", "wb") as f:
             f.write(extant_file.getbuffer())
         with open("tree.nh", "wb") as f:
             f.write(tree_file.getbuffer())
-
         # Save optional files if uploaded
         if cost_file:
             with open("cost.csv", "wb") as f:
                 f.write(cost_file.getbuffer())
-        if physical_file:
-            with open("physical.csv", "wb") as f:
-                f.write(physical_file.getbuffer())
+         # Check if the fixed physical file exists
+        if not os.path.exists(fixed_physical_file_path):
+            st.error(f"Physical file not found at: {fixed_physical_file_path}")
+        else:
+            # Copy the fixed physical file to the working directory as 'physical.csv'
+            shutil.copy(fixed_physical_file_path, "physical.csv")
+            
 
         # Define paths
         parcours_script = r"parcours.py"
-        config_file_path = "config.csv"
 
-        # Define the command to run the Python script with all required arguments
-        command = [python_path, parcours_script, "-f",
-                   config_file_path, "-t", "tree.nh", "-e", "extant.csv"]
+        command = [python_path, parcours_script,
+                       "-f", config_file_path,
+                       "-t", "tree.nh",
+                       "-e", "extant.csv"]
 
-        # Add cost and physical files to the command with separate flags
+            # Include optional cost file if provided
         if cost_file:
             command += ["-c", "cost.csv"]
-        if physical_file:
-            command += ["-p", "pairwise.csv"]
+
+            # Pass the physical file now in the working directory
+        command += ["-p", "pairwise.csv"]
 
         # Run analysis with spinner
         with st.spinner("Running analysis..."):
@@ -190,6 +182,12 @@ if st.button('Run Analysis'):
         if result.returncode == 0:
             st.success("Analysis completed successfully!")
             st.write(result.stdout)
+             # load the raw pairwise data and store it in session state.
+            if os.path.exists("pairwise.csv"):
+                raw_df = pd.read_csv("pairwise.csv")
+                st.session_state.raw_pairwise_df = raw_df
+            else:
+                st.error("pairwise.csv not found!")
 
             # Proceed to wrangle data after successful analysis
             df, wrangled_pairwise_path, subtree_path = wrangle_pairwise_data(
@@ -202,6 +200,9 @@ if st.button('Run Analysis'):
             output_dir = "solutions"
             output_files.extend([os.path.join(output_dir, f) for f in os.listdir(
                 output_dir) if os.path.isfile(os.path.join(output_dir, f))])
+            
+            if wrangled_pairwise_path:
+                    output_files.append(wrangled_pairwise_path)
 
             # Include wrangled pairwise CSV in the output files
             output_files.append(wrangled_pairwise_path)
@@ -413,19 +414,67 @@ if tree_file is not None:
         tmp.write(tree_file.getvalue())
         st.session_state.tree_file = tmp.name  # Store path in session state
 
-# Button to proceed to analysis
+# Button to proceed to visualization
 if st.button('Proceed to Visualize Analysis'):
     if 'tree_file' in st.session_state:
-        # Run analysis and store results in session state
-        df, wrangled_pairwise_path, subtree_path = wrangle_pairwise_data(
-            st.session_state.tree_file)
-        st.session_state.df = df
+        if 'raw_pairwise_df' in st.session_state:
+            st.session_state.raw_df = st.session_state.raw_pairwise_df.copy()
+        else:
+            st.error("Raw pairwise data not found in session state. Please run the analysis first.")
         st.session_state.analysis_completed = True
     else:
         st.error("Please upload a tree file.")
 
 # Show annotation options only if analysis has been completed
 if st.session_state.analysis_completed:
+    # Ensure raw_df exists before proceeding
+    if 'raw_df' in st.session_state:
+        # Place the slider at the top to select the correlation threshold
+        correlation_threshold = st.slider("Select correlation threshold", min_value=0.0, max_value=1.0, value=0.25, step=0.01)
+        # Save the chosen slider value for later use
+        st.session_state.correlation_threshold = correlation_threshold
+
+        # Retrieve the raw dataframe from session state
+        raw_df = st.session_state.raw_df.copy()
+        
+        # Apply the wrangling steps on the raw data:
+        # 1. Filter by correlation using the slider value:
+        df = raw_df[raw_df['Correlation'] >= correlation_threshold]
+        
+        # 2. Exclude rows where Transition_2 is "unknown" or where Char_1 and Char_2 contain "BodyLength"
+        df = df[
+            (df['Transition_2'] != 'unknown') &
+            (~df['Char_1'].str.contains('BodyLength')) &
+            (~df['Char_2'].str.contains('BodyLength'))
+        ]
+        
+        # 3. Further filter out rows where Transition_1 or Transition_2 contain "unknown"
+        df = df[~df['Transition_1'].str.contains('unknown', na=False) &
+                ~df['Transition_2'].str.contains('unknown', na=False)]
+        
+        # 4. Select the relevant columns (including 'Correlation')
+        df = df[['Char_1', 'Char_2', 'Transition_1', 'Transition_2', 'C_Map_1', 'C_Map_2', 'Correlation']]
+        
+        # 5. Clean up the text fields for Transition and C_Map columns
+        for col in ['Transition_1', 'Transition_2', 'C_Map_1', 'C_Map_2']:
+            df[col] = df[col].str.replace(' ', '', regex=False)
+        
+        # 6. Replace 'absent' and 'present' with 0 and 1 for the Transition columns
+        df['Transition_1'] = df['Transition_1'].str.replace('absent', '0').str.replace('present', '1')
+        df['Transition_2'] = df['Transition_2'].str.replace('absent', '0').str.replace('present', '1')
+        
+        # 7. Create a new merged index column and set it as the index
+        df['Merged_Index'] = df['Char_1'] + " - " + df['Char_2']
+        df = df.set_index('Merged_Index')
+        
+        # Check if the filtered dataframe is empty.
+        if df.empty:
+            st.error("No pairwise records meet the selected correlation threshold. Please choose a different threshold that exists in your pairwise file.")
+        else:
+            # Store the filtered, wrangled data in session state
+            st.session_state.df = df
+
+
     st.write("### Select Row(s) to Annotate")
 
     # Primary annotation selection
@@ -516,7 +565,7 @@ if st.session_state.analysis_completed:
             result_viz2 = subprocess.run(
                 ["Rscript",  # Path to Rscript
                  # Path to the R script
-                 "visualization2.2.R",
+                 "visualization2.R",
                  temp_subtree_file,  # Path to the subtree Newick file
                  temp_pairwise_file],  # Pass the CSV file path to R script
                 capture_output=True
