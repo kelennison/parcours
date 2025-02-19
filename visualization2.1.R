@@ -308,6 +308,5 @@ tree_plot_new <- tree_plot_new +
   geom_tree(color = "black", size = 1) +  # Make entire tree black
   scale_color_identity()  # Use specified colors directly
 
-# Print the updated plot
-print(tree_plot_new)
-ggsave("C:\\Users\\USER\\OneDrive\\Documents\\Hello World\\parcours-main\\viz2.png", plot = tree_plot_new, width = 12, height = 8, dpi = 300)
+print(tree_plot)
+ggsave("images/viz2.png", plot = tree_plot, width = 12, height = 8, dpi = 300)
