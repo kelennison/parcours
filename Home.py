@@ -525,7 +525,7 @@ if st.session_state.analysis_completed:
     # Conditions for visualizations
     # Fetch selected rows for condition checks
     selected_rows = st.session_state.df.loc[selected_rows_indices]
-    if annotation_2 and all(selected_rows["C_Map_1"].apply(lambda x: ";" not in x)) and all(selected_rows["C_Map_2"].apply(lambda x: ";" not in x)):
+    if all(selected_rows["C_Map_1"].apply(lambda x: ";" not in x)) and all(selected_rows["C_Map_2"].apply(lambda x: ";" not in x)):
         # Inspect the generated CSV files
         if st.button('Run Visualization 1'):
             # Initialize the progress bar for visualizations
@@ -553,7 +553,7 @@ if st.session_state.analysis_completed:
                 st.error("Error in Visualization 1.")
                 st.write(result_viz1.stderr.decode())
 
-    elif not annotation_2 and (any(selected_rows["C_Map_1"].str.contains(";")) or any(selected_rows["C_Map_2"].str.contains(";"))):
+    elif any(selected_rows["C_Map_1"].str.contains(";")) or any(selected_rows["C_Map_2"].str.contains(";")):
         # When running Visualization 2
         if st.button('Run Visualization 2'):
             # Initialize the progress bar for visualizations
@@ -562,11 +562,11 @@ if st.session_state.analysis_completed:
                      selected_rows_indices)
             progress.progress(25)  # Update progress to 25%
 
-            # Run the R script for Visualization 2
+            # Run the R script for Visualization 2c:\Users\USER\OneDrive\Documents\Hello World\parcours\Home.py
             result_viz2 = subprocess.run(
                 ["Rscript",  # Path to Rscript
                  # Path to the R script
-                 "visualization2.R",
+                 "visualization2.1.R",
                  temp_subtree_file,  # Path to the subtree Newick file
                  temp_pairwise_file],  # Pass the CSV file path to R script
                 capture_output=True
