@@ -1,6 +1,9 @@
 setuptools==65.5.0
 pip
 streamlit==1.38.0
+streamlit-agraph==0.0.45
+python-igraph==0.11.8
+pyvis==0.3.2
 numpy==1.25.2
 pandas==2.2.0
 pillow==10.2.0
