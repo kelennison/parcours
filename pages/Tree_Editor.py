@@ -48,10 +48,6 @@ cytoscape_html = f"""
             margin-right: 5px;
             padding: 5px 10px;
         }}
-        .selected-node {{
-            background-color: #FF4136 !important;
-            border: 2px solid #85144b !important;
-        }}
     </style>
 </head>
 <body>
@@ -59,7 +55,6 @@ cytoscape_html = f"""
     <div class="btn-container">
         <button id="undo-btn">Undo</button>
         <button id="redo-btn">Redo</button>
-        <button id="delete-btn">Delete Selected Node</button>  
         <button id="reset-btn">Reset</button>  
         <button id="newick-btn">Generate Newick</button>
         <button id="download-btn">Download Newick</button>
@@ -198,39 +193,7 @@ cytoscape_html = f"""
                 isUndoRedo = false;
             }}
             
-            let selectedNode = null;
-            // Handle node selection
-            cy.on('tap', 'node', function(evt) {{
-                const node = evt.target;
-                
-                // Clear previous selection
-                if(selectedNode) {{
-                    selectedNode.removeClass('selected-node');
-                }}
-                
-                // Select new node
-                selectedNode = node;
-                node.addClass('selected-node');
-                
-                // Prevent other interactions
-                evt.stopPropagation();
-            }});
 
-            // Handle canvas clicks to clear selection
-            cy.on('tap', function(evt) {{
-                if(evt.target === cy && selectedNode) {{
-                    selectedNode.removeClass('selected-node');
-                    selectedNode = null;
-                }}
-            }});
-
-    // Handle delete button click
-    document.getElementById('delete-btn').addEventListener('click', function() {{
-        if(selectedNode && selectedNode.id() !== 'node1') {{  // Protect root node
-            cy.remove(selectedNode);
-            selectedNode = null;
-        }}
-    }});
             // Node creation
             cy.on('tap', function(event) {{
                 if (event.target === cy) {{
