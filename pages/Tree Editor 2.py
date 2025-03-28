@@ -224,13 +224,13 @@ cytoscape_html = f"""
                 }}
             }});
 
-    // Handle delete button click
-    document.getElementById('delete-btn').addEventListener('click', function() {{
-        if(selectedNode && selectedNode.id() !== 'node1') {{  // Protect root node
-            cy.remove(selectedNode);
-            selectedNode = null;
-        }}
-    }});
+            // Handle delete button click
+            document.getElementById('delete-btn').addEventListener('click', function() {{
+                if(selectedNode && selectedNode.id() !== 'node1') {{  // Protect root node
+                    cy.remove(selectedNode);
+                    selectedNode = null;
+                }}
+            }});
             // Node creation
             cy.on('tap', function(event) {{
                 if (event.target === cy) {{
