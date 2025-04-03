@@ -180,9 +180,9 @@ cytoscape_html = f"""
                     sourceNode = null;
                 }}
 
-                // Reset graph elements
+                // Reset graph elements to the original 'elements'
                 cy.elements().remove();
-                cy.add(initialElements);
+                cy.add(elements);  // Corrected from initialElements to elements
                 
                 // Reset layout
                 cy.layout({{
@@ -191,12 +191,13 @@ cytoscape_html = f"""
                     nodeDimensionsIncludeLabels: true
                 }}).run();
 
-                // Reset history stacks
-                undoStack = [initialElements];
+                // Reset history stacks to the original 'elements'
+                undoStack = [elements];  // Corrected from initialElements to elements
                 redoStack = [];
                 
                 isUndoRedo = false;
             }}
+            
             
             let selectedNode = null;
             // Handle node selection
