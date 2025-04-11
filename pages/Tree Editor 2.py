@@ -86,6 +86,16 @@ cytoscape_html = f"""
                             'font-size': 10
                         }}
                     }},
+                    // ADD THIS NEW STYLE RULE FOR SELECTED NODES
+                    {{
+                        selector: '.selected-node',
+                        style: {{
+                            'background-color': '#FF4136',
+                            'border-width': 2,
+                            'border-color': '#85144b',
+                            'border-style': 'solid'
+                        }}
+                    }},
                     {{
                         selector: 'edge',
                         style: {{
@@ -225,13 +235,21 @@ cytoscape_html = f"""
                 }}
             }});
 
-            // Handle delete button click
-            document.getElementById('delete-btn').addEventListener('click', function() {{
-                if(selectedNode && selectedNode.id() !== 'node1') {{  // Protect root node
-                    cy.remove(selectedNode);
-                    selectedNode = null;
-                }}
-            }});
+            // MODIFIED DELETE HANDLER
+            document.getElementById('delete-btn').addEventListener('click', function() {{  
+                if(selectedNode && selectedNode.id() !== 'node1') {{  
+                    // Remove edges FIRST to avoid stale references
+                    const edgesToRemove = selectedNode.connectedEdges();  
+                    cy.remove(edgesToRemove);  
+                    
+                    // Remove node and clear selection
+                    cy.remove(selectedNode);  
+                    selectedNode.removeClass('selected-node');  // Remove class from deleted node
+                    selectedNode = null;  // Clear selection
+                }}  
+            }});  
+            
+  
             // Node creation
             cy.on('tap', function(event) {{
                 if (event.target === cy) {{
