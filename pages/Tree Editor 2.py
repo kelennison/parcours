@@ -59,7 +59,8 @@ cytoscape_html = f"""
     <div class="btn-container">
         <button id="undo-btn">Undo</button>
         <button id="redo-btn">Redo</button>
-        <button id="delete-btn">Delete Selected Node</button>  
+        <button id="delete-btn">Delete Selected Node</button>
+        <button id="copy-btn">Copy Subtree</button>  
         <button id="reset-btn">Reset</button>  
         <button id="newick-btn">Generate Newick</button>
         <button id="download-btn">Download Newick</button>
@@ -67,6 +68,9 @@ cytoscape_html = f"""
     <div id="newick-output"></div>
     <script>
         document.addEventListener('DOMContentLoaded', function() {{
+            let copiedSubtree = null;
+            let copySource = null;
+            let nodeCounter = {len(elements) + 1};  // Track node IDs
             var elements = {elements_json};
             var cy = cytoscape({{
                 container: document.getElementById('cy'),
@@ -322,6 +326,105 @@ cytoscape_html = f"""
                     if (e.key === 'Enter') save();
                 }});
             }});
+
+
+            // COPY SUBTREE FUNCTIONALITY
+            document.getElementById('copy-btn').addEventListener('click', function() {{
+                if (!selectedNode) return;
+                
+                // Store original node and its subtree
+                copySource = selectedNode;
+                copiedSubtree = getSubtree(selectedNode);
+            }});
+
+            // PASTE FUNCTIONALITY (triggered on node click)
+            cy.on('tap', 'node', function(evt) {{
+                if (!copiedSubtree || evt.target === copySource) return;
+                
+                const targetNode = evt.target;
+                const newNodes = cloneSubtree(copiedSubtree, targetNode.position());
+
+            
+             // Connect copied subtree to target node
+                cy.add({{
+                    group: 'edges',
+                    data: {{
+                        source: targetNode.id(),
+                        target: newNodes.rootId
+                    }}
+                }});
+                
+                // Reset copy state
+                copiedSubtree = null;
+                copySource = null;
+            }});
+
+            // Helper: Get subtree structure
+            function getSubtree(rootNode) {{
+                const subtree = {{ nodes: [], edges: [] }};
+                const visited = new Set();
+                
+                function traverse(node) {{
+                    if (visited.has(node.id())) return;
+                    visited.add(node.id());
+                    
+                    subtree.nodes.push({{
+                        id: node.id(),
+                        label: node.data('label'),
+                        position: node.position()
+                    }});
+                    
+                    node.outgoers().edges().forEach(edge => {{
+                        subtree.edges.push({{
+                            source: edge.source().id(),
+                            target: edge.target().id()
+                        }});
+                        traverse(edge.target());
+                    }});
+                }}
+                
+                traverse(rootNode);
+                return subtree;
+            }}
+
+            // Helper: Clone subtree with new IDs
+            function cloneSubtree(subtree, offset) {{
+                const idMap = new Map();
+                const newNodes = [];
+                
+                // Clone nodes with new IDs
+                subtree.nodes.forEach(node => {{
+                    const newId = `node_${{++nodeCounter}}`;
+                    idMap.set(node.id, newId);
+                    
+                    newNodes.push({{
+                        group: 'nodes',
+                        data: {{ 
+                            id: newId, 
+                            label: `${{node.label}}_copy` 
+                        }},
+                        position: {{
+                            x: node.position.x + offset.x + 50,
+                            y: node.position.y + offset.y + 50
+                        }}
+                    }});
+                }});
+                
+                // Clone edges with new IDs
+                subtree.edges.forEach(edge => {{
+                    newNodes.push({{
+                        group: 'edges',
+                        data: {{
+                            source: idMap.get(edge.source),
+                            target: idMap.get(edge.target)
+                        }}
+                    }});
+                }});
+                
+                cy.add(newNodes);
+                return {{ rootId: idMap.get(subtree.nodes[0].id) }};
+            }}
+
 
             // Cancel operations
             cy.on('tap', function(evt) {{

@@ -48,6 +48,10 @@ cytoscape_html = f"""
             margin-right: 5px;
             padding: 5px 10px;
         }}
+        .selected-node {{
+            background-color: #FF4136 !important;
+            border: 2px solid #85144b !important;
+        }}
     </style>
 </head>
 <body>
@@ -55,6 +59,7 @@ cytoscape_html = f"""
     <div class="btn-container">
         <button id="undo-btn">Undo</button>
         <button id="redo-btn">Redo</button>
+        <button id="delete-btn">Delete Selected Node</button>  
         <button id="reset-btn">Reset</button>  
         <button id="newick-btn">Generate Newick</button>
         <button id="download-btn">Download Newick</button>
@@ -79,6 +84,16 @@ cytoscape_html = f"""
                             'text-halign': 'center',
                             'text-margin-y': 10,
                             'font-size': 10
+                        }}
+                    }},
+                    // ADD THIS NEW STYLE RULE FOR SELECTED NODES
+                    {{
+                        selector: '.selected-node',
+                        style: {{
+                            'background-color': '#FF4136',
+                            'border-width': 2,
+                            'border-color': '#85144b',
+                            'border-style': 'solid'
                         }}
                     }},
                     {{
@@ -175,9 +190,9 @@ cytoscape_html = f"""
                     sourceNode = null;
                 }}
 
-                // Reset graph elements
+                // Reset graph elements to the original 'elements'
                 cy.elements().remove();
-                cy.add(initialElements);
+                cy.add(elements);  // Corrected from initialElements to elements
                 
                 // Reset layout
                 cy.layout({{
@@ -186,14 +201,55 @@ cytoscape_html = f"""
                     nodeDimensionsIncludeLabels: true
                 }}).run();
 
-                // Reset history stacks
-                undoStack = [initialElements];
+                // Reset history stacks to the original 'elements'
+                undoStack = [elements];  // Corrected from initialElements to elements
                 redoStack = [];
                 
                 isUndoRedo = false;
             }}
             
+            
+            let selectedNode = null;
+            // Handle node selection
+            cy.on('tap', 'node', function(evt) {{
+                const node = evt.target;
+                
+                // Clear previous selection
+                if(selectedNode) {{
+                    selectedNode.removeClass('selected-node');
+                }}
+                
+                // Select new node
+                selectedNode = node;
+                node.addClass('selected-node');
+                
+                // Prevent other interactions
+                evt.stopPropagation();
+            }});
 
+            // Handle canvas clicks to clear selection
+            cy.on('tap', function(evt) {{
+                if(evt.target === cy && selectedNode) {{
+                    selectedNode.removeClass('selected-node');
+                    selectedNode = null;
+                }}
+            }});
+
+            // MODIFIED DELETE HANDLER
+            document.getElementById('delete-btn').addEventListener('click', function() {{  
+                if(selectedNode && selectedNode.id() !== 'node1') {{  
+                    // Remove edges FIRST to avoid stale references
+                    const edgesToRemove = selectedNode.connectedEdges();  
+                    cy.remove(edgesToRemove);  
+                    
+                    // Remove node and clear selection
+                    cy.remove(selectedNode);  
+                    selectedNode.removeClass('selected-node');  // Remove class from deleted node
+                    selectedNode = null;  // Clear selection
+                }}  
+            }});  
+            
+  
             // Node creation
             cy.on('tap', function(event) {{
                 if (event.target === cy) {{
