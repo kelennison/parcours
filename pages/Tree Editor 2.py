@@ -52,15 +52,23 @@ cytoscape_html = f"""
             background-color: #FF4136 !important;
             border: 2px solid #85144b !important;
         }}
+        #selection-rectangle {{
+            display: none;
+            position: absolute;
+            border: 2px dashed #0074D9;
+            background-color: rgba(0, 116, 217, 0.1);
+            pointer-events: none;
+        }}
     </style>
 </head>
 <body>
     <div id="cy"></div>
+    <div id="selection-rectangle"></div>
     <div class="btn-container">
         <button id="undo-btn">Undo</button>
         <button id="redo-btn">Redo</button>
         <button id="delete-btn">Delete Selected Node</button>
-        <button id="copy-btn">Copy Subtree</button>  
+        <button id="duplicate-btn">Duplicate Selected</button> 
         <button id="reset-btn">Reset</button>  
         <button id="newick-btn">Generate Newick</button>
         <button id="download-btn">Download Newick</button>
@@ -68,9 +76,6 @@ cytoscape_html = f"""
     <div id="newick-output"></div>
     <script>
         document.addEventListener('DOMContentLoaded', function() {{
-            let copiedSubtree = null;
-            let copySource = null;
-            let nodeCounter = {len(elements) + 1};  // Track node IDs
             var elements = {elements_json};
             var cy = cytoscape({{
                 container: document.getElementById('cy'),
@@ -131,7 +136,10 @@ cytoscape_html = f"""
             let undoStack = [];
             let redoStack = [];
             let isUndoRedo = false;
-
+            let selectedNodes = [];
+            let isDragging = false;
+            let startX, startY, currentX, currentY;
+            
             // Initialize undo stack with initial state
             undoStack.push(cy.json().elements);
 
@@ -213,47 +221,164 @@ cytoscape_html = f"""
             }}
             
             
-            let selectedNode = null;
-            // Handle node selection
+            // Drag selection functionality
+            cy.on('mousedown', function(evt) {{
+                if (evt.target === cy) {{
+                    isDragging = true;
+                    const containerRect = cy.container().getBoundingClientRect();
+                    startX = evt.originalEvent.clientX - containerRect.left;
+                    startY = evt.originalEvent.clientY - containerRect.top;
+                    currentX = startX;
+                    currentY = startY;
+                    const rect = document.getElementById('selection-rectangle');
+                    rect.style.display = 'block';
+                    rect.style.left = startX + 'px';
+                    rect.style.top = startY + 'px';
+                    rect.style.width = '0';
+                    rect.style.height = '0';
+                }}
+            }});
+
+            cy.on('mousemove', function(evt) {{
+                if (isDragging) {{
+                    const containerRect = cy.container().getBoundingClientRect();
+                    currentX = evt.originalEvent.clientX - containerRect.left;
+                    currentY = evt.originalEvent.clientY - containerRect.top;
+                    updateSelectionRectangle();
+                }}
+            }});
+
+            function updateSelectionRectangle() {{
+                const rect = document.getElementById('selection-rectangle');
+                const left = Math.min(startX, currentX);
+                const top = Math.min(startY, currentY);
+                const width = Math.abs(currentX - startX);
+                const height = Math.abs(currentY - startY);
+                rect.style.left = left + 'px';
+                rect.style.top = top + 'px';
+                rect.style.width = width + 'px';
+                rect.style.height = height + 'px';
+            }}
+
+            cy.on('mouseup', function(evt) {{
+                if (isDragging) {{
+                    isDragging = false;
+                    const rect = document.getElementById('selection-rectangle');
+                    rect.style.display = 'none';
+
+                    const left = Math.min(startX, currentX);
+                    const right = Math.max(startX, currentX);
+                    const top = Math.min(startY, currentY);
+                    const bottom = Math.max(startY, currentY);
+
+                    const newSelected = cy.nodes().filter(node => {{
+                        const pos = node.renderedPosition();
+                        return pos.x >= left && pos.x <= right && pos.y >= top && pos.y <= bottom;
+                    }});
+
+                    selectedNodes.forEach(n => n.removeClass('selected-node'));
+                    newSelected.addClass('selected-node');
+                    selectedNodes = newSelected.toArray();
+                }}
+            }});
+            // ====== FIXED SELECTION HANDLING ======
             cy.on('tap', 'node', function(evt) {{
                 const node = evt.target;
-                
-                // Clear previous selection
-                if(selectedNode) {{
-                    selectedNode.removeClass('selected-node');
+                const isCtrl = evt.originalEvent.ctrlKey || evt.originalEvent.metaKey;
+
+                // Clear selection if not holding Ctrl/Cmd
+                if (!isCtrl && !node.hasClass('selected-node')) {{
+                    selectedNodes.forEach(n => n.removeClass('selected-node'));
+                    selectedNodes = [];
                 }}
-                
-                // Select new node
-                selectedNode = node;
-                node.addClass('selected-node');
-                
-                // Prevent other interactions
+
+                // Toggle selection
+                node.toggleClass('selected-node');
+                if (node.hasClass('selected-node')) {{
+                    selectedNodes.push(node);
+                }} else {{
+                    selectedNodes = selectedNodes.filter(n => n.id() !== node.id());
+                }}
                 evt.stopPropagation();
             }});
 
-            // Handle canvas clicks to clear selection
-            cy.on('tap', function(evt) {{
-                if(evt.target === cy && selectedNode) {{
-                    selectedNode.removeClass('selected-node');
-                    selectedNode = null;
-                }}
+            // ====== DUPLICATE FUNCTION (with extra braces) ======
+            document.getElementById('duplicate-btn').addEventListener('click', function() {{
+                const selNodes = cy.nodes('.selected-node');
+                if (selNodes.empty()) return;
+
+                const selEdges = selNodes
+                    .connectedEdges()
+                    .filter(edge =>
+                        selNodes.contains(edge.source()) &&
+                        selNodes.contains(edge.target())
+                    );
+                
+                const nodeJsons = selNodes.jsons();
+                const edgeJsons = selEdges.jsons();
+
+                const existing = new Set(cy.nodes().map(n => n.id()));
+                let counter = 1;
+                const idMap = new Map();
+                nodeJsons.forEach(blob => {{
+                    while (existing.has(`node${{counter}}`)) counter++;
+                    const newId = `node${{counter++}}`;
+                    existing.add(newId);
+                    idMap.set(blob.data.id, newId);
+                }});
+
+                const newNodeBlobs = nodeJsons.map(blob => ({{
+                    group: blob.group,
+                    data: {{
+                        ...blob.data,
+                        id:    idMap.get(blob.data.id),
+                        label: blob.data.label + '_copy'
+                    }},
+                    position: {{
+                        x: blob.position.x + 50,
+                        y: blob.position.y + 50
+                    }}
+                }}));
+
+                const newEdgeBlobs = edgeJsons.map(blob => ({{
+                    group: 'edges',  // Force group to edges
+                    data: {{
+                        ...blob.data,
+                        id: `edge_${{idMap.get(blob.data.source)}}_${{idMap.get(blob.data.target)}}`, 
+                        source: idMap.get(blob.data.source),
+                        target: idMap.get(blob.data.target)
+                    }}
+                }}));
+                cy.batch(() => {{
+                    cy.add([...newNodeBlobs, ...newEdgeBlobs]);
+                    saveState();
+                }});
             }});
 
-            // MODIFIED DELETE HANDLER
+
+       
+            // ====== DELETE FUNCTION (with extra braces) ======
             document.getElementById('delete-btn').addEventListener('click', function() {{  
-                if(selectedNode && selectedNode.id() !== 'node1') {{  
-                    // Remove edges FIRST to avoid stale references
-                    const edgesToRemove = selectedNode.connectedEdges();  
-                    cy.remove(edgesToRemove);  
-                    
-                    // Remove node and clear selection
-                    cy.remove(selectedNode);  
-                    selectedNode.removeClass('selected-node');  // Remove class from deleted node
-                    selectedNode = null;  // Clear selection
-                }}  
+                // 1. Exclude root  
+                const toDelete = selectedNodes.filter(n => n.id() !== 'node1');  
+                if (toDelete.length === 0) return;  
+
+                // 2. Build collections  
+                const nodeCollection = cy.collection(toDelete);  
+                const edgeCollection = nodeCollection.connectedEdges();  
+
+                // 3. Batch-remove & save state  
+                cy.batch(() => {{  
+                    cy.remove(edgeCollection);  
+                    cy.remove(nodeCollection);  
+                    saveState();  
+                }});  
+
+                // 4. Clear selection array (keep root if selected)  
+                selectedNodes = selectedNodes.filter(n => n.id() === 'node1');  
             }});  
-            
-  
+
+
             // Node creation
             cy.on('tap', function(event) {{
                 if (event.target === cy) {{
@@ -327,104 +452,7 @@ cytoscape_html = f"""
                 }});
             }});
 
-
-            // COPY SUBTREE FUNCTIONALITY
-            document.getElementById('copy-btn').addEventListener('click', function() {{
-                if (!selectedNode) return;
-                
-                // Store original node and its subtree
-                copySource = selectedNode;
-                copiedSubtree = getSubtree(selectedNode);
-            }});
-
-            // PASTE FUNCTIONALITY (triggered on node click)
-            cy.on('tap', 'node', function(evt) {{
-                if (!copiedSubtree || evt.target === copySource) return;
-                
-                const targetNode = evt.target;
-                const newNodes = cloneSubtree(copiedSubtree, targetNode.position());
-
             
-             // Connect copied subtree to target node
-                cy.add({{
-                    group: 'edges',
-                    data: {{
-                        source: targetNode.id(),
-                        target: newNodes.rootId
-                    }}
-                }});
-                
-                // Reset copy state
-                copiedSubtree = null;
-                copySource = null;
-            }});
-
-            // Helper: Get subtree structure
-            function getSubtree(rootNode) {{
-                const subtree = {{ nodes: [], edges: [] }};
-                const visited = new Set();
-                
-                function traverse(node) {{
-                    if (visited.has(node.id())) return;
-                    visited.add(node.id());
-                    
-                    subtree.nodes.push({{
-                        id: node.id(),
-                        label: node.data('label'),
-                        position: node.position()
-                    }});
-                    
-                    node.outgoers().edges().forEach(edge => {{
-                        subtree.edges.push({{
-                            source: edge.source().id(),
-                            target: edge.target().id()
-                        }});
-                        traverse(edge.target());
-                    }});
-                }}
-                
-                traverse(rootNode);
-                return subtree;
-            }}
-
-            // Helper: Clone subtree with new IDs
-            function cloneSubtree(subtree, offset) {{
-                const idMap = new Map();
-                const newNodes = [];
-                
-                // Clone nodes with new IDs
-                subtree.nodes.forEach(node => {{
-                    const newId = `node_${{++nodeCounter}}`;
-                    idMap.set(node.id, newId);
-                    
-                    newNodes.push({{
-                        group: 'nodes',
-                        data: {{ 
-                            id: newId, 
-                            label: `${{node.label}}_copy` 
-                        }},
-                        position: {{
-                            x: node.position.x + offset.x + 50,
-                            y: node.position.y + offset.y + 50
-                        }}
-                    }});
-                }});
-                
-                // Clone edges with new IDs
-                subtree.edges.forEach(edge => {{
-                    newNodes.push({{
-                        group: 'edges',
-                        data: {{
-                            source: idMap.get(edge.source),
-                            target: idMap.get(edge.target)
-                        }}
-                    }});
-                }});
-                
-                cy.add(newNodes);
-                return {{ rootId: idMap.get(subtree.nodes[0].id) }};
-            }}
-
 
             // Cancel operations
             cy.on('tap', function(evt) {{
@@ -439,7 +467,7 @@ cytoscape_html = f"""
                     }}
                 }}
             }});
-
+            
             // Modified Newick generation function
             function generateNewick() {{
                 // Always use Node1 as root
