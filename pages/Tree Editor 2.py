@@ -527,5 +527,5 @@ cytoscape_html = f"""
 </html>
 """
 
-st.title("Newick Generation App")
+st.title("Newick Generation WebApp")
 st.components.v1.html(cytoscape_html, height=700)
