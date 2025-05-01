@@ -380,8 +380,27 @@ cytoscape_html = f"""
 
 
             // Node creation
+            // ====== MODIFIED CANVAS CLICK HANDLER ======
             cy.on('tap', function(event) {{
                 if (event.target === cy) {{
+                    const isCtrl = event.originalEvent.ctrlKey || event.originalEvent.metaKey;
+                    
+                    // 1️⃣ Ctrl/Cmd + Click: Deselect All Nodes
+                    if (isCtrl) {{
+                        cy.nodes('.selected-node').removeClass('selected-node');
+                        selectedNodes = [];
+                        return;
+                    }}
+
+                    // 2️⃣ Regular Click: Deselect if nodes are selected, else create node
+                    const sel = cy.nodes('.selected-node');
+                    if (sel.length > 0) {{
+                        sel.removeClass('selected-node');
+                        selectedNodes = [];
+                        return;
+                    }}
+
+                    // 3️⃣ Create New Node (only if no deselection occurred)
                     if (activeEditor) {{
                         activeEditor.remove();
                         activeEditor = null;
