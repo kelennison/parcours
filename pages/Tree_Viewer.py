@@ -17,7 +17,7 @@ def visualize_tree(newick_file):
         
         if result.returncode == 0:
             # Display generated image
-            st.image("Rplot.png", caption="Phylogenetic Tree Visualization", use_container_width=True)
+            st.image("Rplot.png", caption="Phylogenetic Tree Visualization", use_column_width=True)
         else:
             st.error("Error generating visualization:")
             st.code(result.stderr)
