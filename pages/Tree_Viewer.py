@@ -8,7 +8,7 @@ def visualize_tree(newick_file):
     try:
         # Run R script
         result = subprocess.run(
-            ["Rscript.exe", 
+            ["Rscript", 
              "treeviewer.R", 
              newick_file],  # Fixed variable name
             capture_output=True,
