@@ -130,8 +130,51 @@ cytoscape_html = f"""
 
             }});
 
-             
+        // ==== GROUP DRAGGING FOR SELECTED NODES ====
+        let initialPositions = new Map();
+        let isGroupDragging = false;
 
+        cy.on('grab', 'node', function(evt) {{
+            const node = evt.target;
+            if (node.hasClass('selected-node')) {{
+                isGroupDragging = true;
+                // Store initial positions of all selected nodes
+                selectedNodes.forEach(n => {{
+                    initialPositions.set(n.id(), {{
+                        x: n.position('x'),
+                        y: n.position('y')
+                    }});
+                }});
+            }}
+        }});
+
+        cy.on('drag', 'node', function(evt) {{
+            if (!isGroupDragging) return;
+
+            const draggedNode = evt.target;
+            if (!draggedNode.hasClass('selected-node')) return;
+
+            // Calculate displacement
+            const dx = draggedNode.position('x') - initialPositions.get(draggedNode.id()).x;
+            const dy = draggedNode.position('y') - initialPositions.get(draggedNode.id()).y;
+
+            // Move all selected nodes by the same displacement
+            selectedNodes.forEach(n => {{
+                if (n.id() !== draggedNode.id()) {{
+                    n.position({{
+                        x: initialPositions.get(n.id()).x + dx,
+                        y: initialPositions.get(n.id()).y + dy
+                    }});
+                }}
+            }});
+        }});
+
+        cy.on('free', 'node', function() {{
+            isGroupDragging = false;
+            initialPositions.clear();
+        }});
+
+            
             // ─── only mark justDragged when a real box‐selection occurred ──────────
             cy.boxSelectionEnabled(true);
             cy.on('boxselect', function() {{
