@@ -76,6 +76,9 @@ cytoscape_html = f"""
         <button id="reset-btn">Reset</button>  
         <button id="newick-btn">Generate Newick</button>
         <button id="download-btn">Download Newick</button>
+        <div id="newick-output"></div>
+        <div id="edge-warning" style="margin-top:10px; color:red; font-family: monospace; font-size: 14px;"></div>
+
     </div>
     <div id="newick-output"></div>
     <script>
@@ -120,6 +123,7 @@ cytoscape_html = f"""
                             'arrow-scale': 0.8
                         }}
                     }},
+                    
                     
                 ],
                 layout: {{
@@ -263,6 +267,9 @@ cytoscape_html = f"""
                     animate: false,
                     nodeDimensionsIncludeLabels: true
                 }}).run();
+                
+              
+
 
                 // Reset history stacks to the original 'elements'
                 undoStack = [elements];  // Corrected from initialElements to elements
@@ -407,7 +414,7 @@ cytoscape_html = f"""
                     group: blob.group,
                     data: {{
                         ...blob.data,
-                        id:    idMap.get(blob.data.id),
+                        id: idMap.get(blob.data.id),
                         label: blob.data.label + '_copy'
                     }},
                     position: {{
@@ -417,21 +424,32 @@ cytoscape_html = f"""
                 }}));
 
                 const newEdgeBlobs = edgeJsons.map(blob => ({{
-                    group: 'edges',  // Force group to edges
+                    group: 'edges',
                     data: {{
                         ...blob.data,
-                        id: `edge_${{idMap.get(blob.data.source)}}_${{idMap.get(blob.data.target)}}`, 
+                        id: `edge_${{idMap.get(blob.data.source)}}_${{idMap.get(blob.data.target)}}`,
                         source: idMap.get(blob.data.source),
                         target: idMap.get(blob.data.target)
                     }}
                 }}));
+
                 cy.batch(() => {{
-                    cy.add([...newNodeBlobs, ...newEdgeBlobs]);
+                    const newEles = cy.add([...newNodeBlobs, ...newEdgeBlobs]);
+
+                    // 1. Clear old selection
+                    cy.nodes('.selected-node').removeClass('selected-node');
+                    selectedNodes = [];
+
+                    // 2. Select only new duplicated nodes
+                    const newNodes = newEles.filter(ele => ele.isNode());
+                    newNodes.forEach(n => n.addClass('selected-node'));
+                    selectedNodes = newNodes.toArray();
+
                     saveState();
                 }});
             }});
 
-            // ====== DELETE FUNCTION (with extra braces) ======
+            // ====== IMPROVED DELETE FUNCTION — with interaction reset ======
             document.getElementById('delete-btn').addEventListener('click', function() {{  
                 // 1. Exclude root  
                 const toDelete = selectedNodes.filter(n => n.id() !== 'node1');  
@@ -448,17 +466,25 @@ cytoscape_html = f"""
                     saveState();  
                 }});  
 
-                // 4. Clear selection array (keep root if selected)  
+                // 4. Clear selection state
                 selectedNodes = selectedNodes.filter(n => n.id() === 'node1'); 
                 cy.nodes('.selected-node').removeClass('selected-node');
                 selectedNodes = [];
-                sourceNode = null;  
-            }});  
+                sourceNode = null;
+
+                // 5. Reset interaction flags and selection visuals
+                isDragging = false;
+                justDragged = false;
+                cy.userPanningEnabled(true);
+                document.getElementById('selection-rectangle').style.display = 'none';
+            }});
+  
             
 
             // ─── REVISED TAP handler: now checks justDragged first ────────────────
             cy.on('tap', function(event) {{
                 if (event.target === cy) {{
+                    cy.userPanningEnabled(true);  // ✅ Re-enable panning
                     // 1) Swallow *only* the stray tap that follows a box‐select
                     if (justDragged) {{
                         justDragged = false;
@@ -505,11 +531,12 @@ cytoscape_html = f"""
                     selectedNodes = [];
                 }}
             }});
+            
 
-            // Modified edge creation handler
+            // ==== MODIFIED EDGE CREATION HANDLER - PREVENTS DUPLICATE EDGES ====
             cy.on('tap', 'node', function(evt) {{
                 if (activeEditor) return;
-                
+
                 const node = evt.target;
                 if (!sourceNode) {{
                     sourceNode = node;
@@ -517,10 +544,26 @@ cytoscape_html = f"""
                     evt.stopImmediatePropagation();
                 }} else {{
                     if (sourceNode.id() !== node.id()) {{
-                        cy.add({{
-                            group: 'edges',
-                            data: {{ source: sourceNode.id(), target: node.id() }}
-                        }});
+                        // Check if edge already exists
+                        const existingEdge = cy.edges().filter(edge => 
+                            (edge.data('source') === sourceNode.id() && 
+                            edge.data('target') === node.id()) ||
+                            (edge.data('source') === node.id() && 
+                            edge.data('target') === sourceNode.id())
+                        );
+
+                        if (existingEdge.length === 0) {{
+                            cy.add({{
+                                group: 'edges',
+                                data: {{ source: sourceNode.id(), target: node.id() }}
+                            }});
+                        }} else {{
+                            document.getElementById('edge-warning').innerText = "Edge already exists between these nodes!";
+                            setTimeout(() => {{
+                                document.getElementById('edge-warning').innerText = "";
+                            }}, 10000);  // Hide after 10 seconds
+
+                        }}
                     }}
                     // Clear ALL selections after edge creation
                     cy.nodes('.selected-node').removeClass('selected-node');
@@ -529,6 +572,8 @@ cytoscape_html = f"""
                     evt.stopImmediatePropagation();
                 }}
             }});
+
+            
             var lastClickTime = 0;
             var clickTimeout;
             var DOUBLE_CLICK_DELAY = 300;
@@ -593,33 +638,78 @@ cytoscape_html = f"""
             lastClickTime = currentTime;
             }});
            
-            // Modified Newick generation function
+            // ====== ADVANCED ROOT-DETECTING, VISUAL-ORDERED NEWICK GENERATION ======
             function generateNewick() {{
-                // Always use Node1 as root
-                const root = cy.$('#node1');
-                if (root.length === 0) return "No root node found;";
-                
-                function traverse(node) {{
-                    const children = node.outgoers().edges();
-                    if (children.length === 0) {{
-                        return `${{node.data('label')}}`; 
-                    }}
-                    
-                    const childrenNewick = children.map(edge => {{
-                        const child = edge.target();
-                        return `${{traverse(child)}}`;
-                    }}).join(',');
-                    
-                    return `(${{childrenNewick}})${{node.data('label')}}`;
-                }}
-
                 try {{
+                    // Helper: explore connected nodes (undirected)
+                    function explore(node, visited) {{
+                        if (visited.has(node.id())) return;
+                        visited.add(node.id());
+                        node.connectedEdges().forEach(edge => {{
+                            const neighbor = edge.source().id() === node.id()
+                                ? edge.target()
+                                : edge.source();
+                            explore(neighbor, visited);
+                        }});
+                    }}
+
+                    // Helper: pick the node that reaches the most others
+                    function findRootCandidate() {{
+                        const scores = new Map();
+                        cy.nodes().forEach(node => {{
+                            const reachable = new Set();
+                            explore(node, reachable);
+                            scores.set(node.id(), reachable.size);
+                        }});
+                        let maxNode = null;
+                        let maxReach = -1;
+                        for (let [id, score] of scores.entries()) {{
+                            if (score > maxReach) {{
+                                maxNode = cy.getElementById(id);
+                                maxReach = score;
+                            }}
+                        }}
+                        return maxNode;
+                    }}
+
+                    const root = findRootCandidate();
+                    if (!root) return "Could not determine root node.";
+
+                    const visited = new Set();
+
+                    // Recursive Newick builder
+                    function traverse(node) {{
+                        if (visited.has(node.id())) {{
+                            throw new Error("Cycle detected");
+                        }}
+                        visited.add(node.id());
+
+                        // Get all undirected neighbors not yet visited
+                        const neighbors = node.connectedEdges()
+                            .map(edge => {{
+                                return edge.source().id() === node.id()
+                                    ? edge.target()
+                                    : edge.source();
+                            }})
+                            .filter(n => !visited.has(n.id()))
+                            .sort((a, b) => a.renderedPosition().y - b.renderedPosition().y); // 🔥 sort visually top-down
+
+                        const childrenStrings = neighbors.map(n => traverse(n));
+
+                        if (childrenStrings.length > 0) {{
+                            return `(${{childrenStrings.join(',')}})${{node.data('label')}}`;
+                        }}
+                        return node.data('label');
+                    }}
+
                     const newick = `${{traverse(root)}};`;
                     return newick;
+
                 }} catch (e) {{
-                    return "Invalid tree structure;";
+                    return "Newick generation failed: " + e.message;
                 }}
             }}
+
             // Update Newick generation and add download handler
             document.getElementById('newick-btn').addEventListener('click', function() {{
                 const newick = generateNewick();
