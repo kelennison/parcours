@@ -2,7 +2,7 @@ import streamlit as st
 import json
 
 elements = [
-    {"data": {"id": "node1", "label": "Node1"}},
+    {"data": {"id": "node1", "label": "Root"}},
     {"data": {"id": "node2", "label": "Node2"}},
     {"data": {"source": "node1", "target": "node2"}}
 ]
