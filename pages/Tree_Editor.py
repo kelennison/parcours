@@ -2,7 +2,7 @@ import streamlit as st
 import json
 
 elements = [
-    {"data": {"id": "node1", "label": "Root"}},
+    {"data": {"id": "node1", "label": "Node1"}},
     {"data": {"id": "node2", "label": "Node2"}},
     {"data": {"source": "node1", "target": "node2"}}
 ]
@@ -532,8 +532,43 @@ cytoscape_html = f"""
                 }}
             }});
             
+                // ====== CYCLE DETECTION HELPER FUNCTION ======
+            function wouldCreateCycle(source, target) {{
+                // If they're already connected in any direction, it's not a cycle (handled by duplicate check)
+                if (source.edgesTo(target).length > 0 || target.edgesTo(source).length > 0) {{
+                    return false;
+                }}
+                
+                // Perform BFS from target to see if we can reach source
+                const visited = new Set();
+                const queue = [target];
+                
+                while (queue.length > 0) {{
+                    const current = queue.shift();
+                    
+                    if (current.id() === source.id()) {{
+                        return true; // Found a path back to source - would create cycle
+                    }}
+                    
+                    if (!visited.has(current.id())) {{
+                        visited.add(current.id());
+                        
+                        // Follow edges in both directions (undirected)
+                        current.connectedEdges().forEach(edge => {{
+                            const neighbor = edge.source().id() === current.id() 
+                                ? edge.target() 
+                                : edge.source();
+                            if (!visited.has(neighbor.id())) {{
+                                queue.push(neighbor);
+                            }}
+                        }});
+                    }}
+                }}
+                
+                return false; // No path found - no cycle would be created
+            }}
 
-            // ==== MODIFIED EDGE CREATION HANDLER - PREVENTS DUPLICATE EDGES ====
+            // ==== MODIFIED EDGE CREATION HANDLER - PREVENTS DUPLICATES AND CYCLES ====
             cy.on('tap', 'node', function(evt) {{
                 if (activeEditor) return;
 
@@ -544,6 +579,9 @@ cytoscape_html = f"""
                     evt.stopImmediatePropagation();
                 }} else {{
                     if (sourceNode.id() !== node.id()) {{
+                        // Clear any previous warnings
+                        document.getElementById('edge-warning').innerText = "";
+                        
                         // Check if edge already exists
                         const existingEdge = cy.edges().filter(edge => 
                             (edge.data('source') === sourceNode.id() && 
@@ -552,17 +590,24 @@ cytoscape_html = f"""
                             edge.data('target') === sourceNode.id())
                         );
 
-                        if (existingEdge.length === 0) {{
+                        if (existingEdge.length > 0) {{
+                            document.getElementById('edge-warning').innerText = "Edge already exists between these nodes!";
+                            setTimeout(() => {{
+                                document.getElementById('edge-warning').innerText = "";
+                            }}, 10000);
+                        }} 
+                        // Check for cycles
+                        else if (wouldCreateCycle(sourceNode, node)) {{
+                            document.getElementById('edge-warning').innerText = "Adding edge would create a cycle!";
+                            setTimeout(() => {{
+                                document.getElementById('edge-warning').innerText = "";
+                            }}, 10000);
+                        }}
+                        else {{
                             cy.add({{
                                 group: 'edges',
                                 data: {{ source: sourceNode.id(), target: node.id() }}
                             }});
-                        }} else {{
-                            document.getElementById('edge-warning').innerText = "Edge already exists between these nodes!";
-                            setTimeout(() => {{
-                                document.getElementById('edge-warning').innerText = "";
-                            }}, 10000);  // Hide after 10 seconds
-
                         }}
                     }}
                     // Clear ALL selections after edge creation
@@ -573,7 +618,7 @@ cytoscape_html = f"""
                 }}
             }});
 
-            
+
             var lastClickTime = 0;
             var clickTimeout;
             var DOUBLE_CLICK_DELAY = 300;
