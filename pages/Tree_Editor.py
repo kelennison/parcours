@@ -473,7 +473,10 @@ cytoscape_html = f"""
                 selectedNodes = selectedNodes.filter(n => n.id() === 'node1'); 
                 cy.nodes('.selected-node').removeClass('selected-node');
                 selectedNodes = [];
-                sourceNode = null;
+                // Add this for safe cleanup
+                if (sourceNode && sourceNode.removed()) {{
+                    sourceNode = null;
+                }}
 
                 // 5. Reset interaction flags and selection visuals
                 isDragging = false;
@@ -517,10 +520,17 @@ cytoscape_html = f"""
                     }}
 
                     // 4) Finally: create a new node
-                    const id = 'node' + (cy.nodes().length + 1);
+                    // Generate a truly unique ID
+                    let counter = 1;
+                    let newId = 'node' + counter;
+                    while (cy.getElementById(newId).nonempty()) {{
+                        counter++;
+                        newId = 'node' + counter;
+                    }}
+
                     cy.add({{
                         group: 'nodes',
-                        data: {{ id: id, label: 'Node ' + (cy.nodes().length + 1) }},
+                        data: {{ id: newId, label: 'Node ' + counter }},
                         position: event.position
                     }});
                 }}
