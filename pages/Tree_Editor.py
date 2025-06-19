@@ -2,7 +2,7 @@ import streamlit as st
 import json
 
 elements = [
-    {"data": {"id": "node1", "label": "Node1"}},
+    {"data": {"id": "node1", "label": "Root"}},
     {"data": {"id": "node2", "label": "Node2"}},
     {"data": {"source": "node1", "target": "node2"}}
 ]
@@ -62,23 +62,22 @@ cytoscape_html = f"""
             pointer-events: none;
             z-index: 9999
         }}
-       
+        
     </style>
 </head>
 <body>
     <div id="cy"></div>
     <div id="selection-rectangle"></div>
     <div class="btn-container">
-        <button id="undo-btn">Undo</button>
-        <button id="redo-btn">Redo</button>
-        <button id="delete-btn">Delete Selected Node</button>
-        <button id="duplicate-btn">Duplicate Selected</button> 
-        <button id="reset-btn">Reset</button>  
-        <button id="newick-btn">Generate Newick</button>
-        <button id="download-btn">Download Newick</button>
+        <button id="undo-btn" title="Undo the last action">Undo</button>
+        <button id="redo-btn" title="Redo the last undone action">Redo</button>
+        <button id="delete-btn" title="Delete the currently selected node(s)">Delete Selected Node</button>
+        <button id="duplicate-btn" title="Duplicate the currently selected node(s)">Duplicate Selected</button> 
+        <button id="reset-btn" title="Reset the graph and clear all changes">Reset</button>  
+        <button id="newick-btn" title="Generate a Newick string from the current tree">Generate Newick</button>
+        <button id="download-btn" title="Download the generated Newick string as a file">Download Newick</button>
         <div id="newick-output"></div>
         <div id="edge-warning" style="margin-top:10px; color:red; font-family: monospace; font-size: 14px;"></div>
-
     </div>
     <div id="newick-output"></div>
     <script>
@@ -91,15 +90,18 @@ cytoscape_html = f"""
                     {{
                         selector: 'node',
                         style: {{
-                            'width': 30,
-                            'height': 30,
+                            'width': 10,
+                            'height': 10,
                             'background-color': '#0074D9',
                             'label': 'data(label)',
                             'color': '#000',
                             'text-valign': 'bottom',
                             'text-halign': 'center',
-                            'text-margin-y': 10,
-                            'font-size': 10
+                            'text-margin-y': 2,
+                            'font-size': 3,
+                            'overlay-opacity': 10,
+                            'overlay-color': 'transparent',
+                            'overlay-padding': 1.5
                         }}
                     }},
                     // ADD THIS NEW STYLE RULE FOR SELECTED NODES
@@ -108,21 +110,22 @@ cytoscape_html = f"""
                         style: {{
                             'label': 'data(label)',
                             'background-color': '#FF4136',
-                            'border-width': 2,
+                            'border-width': 0.5,
                             'border-color': '#85144b',
-                            'border-style': 'solid'
+                            'border-style': 'solid',
                         }}
                     }},
                     {{
                         selector: 'edge',
                         style: {{
-                            'width': 2,
+                            'width': 0.5,
                             'line-color': '#000',
                             'target-arrow-color': '#000',
                             'target-arrow-shape': 'triangle',
                             'arrow-scale': 0.8
                         }}
                     }},
+                    
                     
                     
                 ],
@@ -788,4 +791,22 @@ cytoscape_html = f"""
 """
 
 st.title("Newick Generation App")
+with st.expander("💡 Detailed Help Guide", expanded=False):
+    st.markdown("""
+    **Interactive Tree Builder Guide**
+    
+    ### Basic Interactions:
+    - **Create Node**: Click on empty space
+    - **Connect Nodes**: Click first node, then second node
+    - **Rename Node**: Double-click on node
+    - **Select Multiple Nodes**: Click+drag to create selection rectangle
+    - **Move Tree**: Click and drag edge
+    - **Move Nodes**: Drag individual nodes
+    - **Move Multiple Nodes**: Select nodes first, then drag one
+    
+    ### Tips:
+    - Root node (labeled "Root") cannot be deleted
+    - Duplicated nodes appear with "_copy" suffix
+    - Hover over buttons for quick info
+    """)
 st.components.v1.html(cytoscape_html, height=1000)
