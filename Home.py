@@ -7,267 +7,378 @@ import zipfile
 import pandas as pd
 import glob
 from PIL import Image
-from ete3 import Tree
-import pandas as pd
-import os
 import tempfile
-import ete3
-import shutil  # Import shutil for file copying
+import shutil
+from Bio import Phylo
+import numpy as np
+import plotly.graph_objects as go
+from collections import defaultdict
 
-
-# Page setup
-st.set_page_config(layout="wide")
-st.title('Parcours: Correlated Evolution Analysis')
-
-# Use local CSS
+# Use local CSS (from Home.py)
 def local_css(file_name):
-    with open(file_name) as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+    if os.path.exists(file_name):
+        with open(file_name) as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+def _split_cmap(value):
+    """Return annotation destinations from a semicolon-separated C_Map value."""
+    if pd.isna(value):
+        return []
+    destinations = []
+    for mapping in str(value).split(";"):
+        mapping = mapping.strip()
+        if not mapping:
+            continue
+        destinations.append(mapping.split("->", 1)[-1].strip())
+    return destinations
 
 
-local_css("style/style.css")  # Load your existing CSS file
+def _format_node_label(node_name):
+    """Make node-to-node mappings easier to read in heatmap row labels."""
+    if node_name is None:
+        return ""
+    node_name = str(node_name).strip()
+    return node_name.replace("->", " → ")
 
 
-# Function to perform data wrangling on the pairwise file and extract subtree
+def create_transition_heatmap(selected_df, subtree_file_path, character_filter="Both",
+                              min_occurrence=1, show_counts=True,
+                              use_log_scale=True):
+    """Build the app7 node × transition heatmap for up to four selections."""
+    n_annotations = min(len(selected_df), 4)
+    cell_counts = defaultdict(lambda: np.zeros(4, dtype=int))
+
+    for annotation_index, (_, row) in enumerate(selected_df.iterrows()):
+        if annotation_index >= 4:
+            break
+        for character, transition_column, cmap_column in (
+            ("Character 1", "Transition_1", "C_Map_1"),
+            ("Character 2", "Transition_2", "C_Map_2"),
+        ):
+            if character_filter not in ("Both", character):
+                continue
+            transition = str(row[transition_column]).strip()
+            for node in _split_cmap(row[cmap_column]):
+                cell_counts[(node, transition)][annotation_index] += 1
+
+    if not cell_counts:
+        return None
+
+    try:
+        subtree = Tree(subtree_file_path, format=1)
+        tree_order = [node.name for node in subtree.traverse("preorder") if node.name]
+    except Exception:
+        tree_order = []
+
+    observed_nodes = {node for node, _ in cell_counts}
+    ordered_nodes = [node for node in tree_order if node in observed_nodes]
+    ordered_nodes.extend(sorted(observed_nodes - set(ordered_nodes)))
+    ordered_transitions = sorted({transition for _, transition in cell_counts})
+
+    count_matrices = np.zeros((4, len(ordered_nodes), len(ordered_transitions)), dtype=int)
+    for row_index, node in enumerate(ordered_nodes):
+        for column_index, transition in enumerate(ordered_transitions):
+            counts = cell_counts.get((node, transition))
+            if counts is not None and counts.sum() >= min_occurrence:
+                count_matrices[:, row_index, column_index] = counts
+
+    totals = count_matrices.sum(axis=0)
+    if not totals.any():
+        return None
+    keep_rows = totals.sum(axis=1) > 0
+    keep_columns = totals.sum(axis=0) > 0
+    count_matrices = count_matrices[:, keep_rows][:, :, keep_columns]
+    totals = totals[keep_rows][:, keep_columns]
+    ordered_nodes = [node for node, keep in zip(ordered_nodes, keep_rows) if keep]
+    ordered_transitions = [transition for transition, keep in zip(ordered_transitions, keep_columns) if keep]
+
+    palettes = [
+        [[0, "#fff5f5"], [1, "#8b0000"]],
+        [[0, "#f2f7ff"], [1, "#08306b"]],
+        [[0, "#fffff0"], [1, "#854d0e"]],
+        [[0, "#f0fdf4"], [1, "#14532d"]],
+    ]
+    names = ["Annotation 1", "Annotation 2", "Annotation 3", "Annotation 4"]
+    traces = []
+    for annotation_index in range(n_annotations):
+        counts = count_matrices[annotation_index]
+        dominant = np.argmax(count_matrices, axis=0) == annotation_index
+        if not dominant.any():
+            continue
+        values = np.where(dominant, counts.astype(float), np.nan)
+        if use_log_scale:
+            values = np.log1p(values)
+        raw_maximum = max(1, int(counts[dominant].max()))
+        displayed_text = np.where(dominant, counts.astype(str), "") if show_counts else None
+        traces.append(go.Heatmap(
+            z=values, x=ordered_transitions, y=ordered_nodes,
+            text=displayed_text, texttemplate="%{text}",
+            colorscale=palettes[annotation_index], zmin=0,
+            zmax=float(np.log1p(raw_maximum) if use_log_scale else raw_maximum),
+            xgap=1, ygap=1, hoverongaps=False,
+            hovertemplate="<b>Node:</b> %{y}<br><b>Transition:</b> %{x}<br><b>Count:</b> %{text}<extra></extra>",
+            colorbar=dict(title=names[annotation_index], x=1.02,
+                          y=0.88 - annotation_index * 0.23, len=0.18,
+                          thickness=14),
+        ))
+
+    figure = go.Figure(traces)
+    figure.update_layout(
+        template="plotly_white",
+        title="Node × Transition heatmap — darker = higher count",
+        xaxis=dict(title="Transition", showgrid=False),
+        yaxis=dict(title="Node / evolutionary position", autorange="reversed",
+                   tickmode="array", tickvals=ordered_nodes,
+                   ticktext=[_format_node_label(node) for node in ordered_nodes],
+                   showgrid=False),
+        plot_bgcolor="#e8e8e8", height=max(440, 30 * len(ordered_nodes) + 220),
+        margin=dict(l=260, r=260, t=90, b=90), showlegend=False,
+    )
+    return figure
+
 def wrangle_pairwise_data(tree_path):
     pairwise_path = "pairwise.csv"
     if os.path.exists(pairwise_path):
-        # Load the CSV file
         df = pd.read_csv(pairwise_path)
-
-        # Filter rows where Correlation is greater than or equal to 0.5
-        #df = df[df['Correlation'] >= 0.5]
-
-        # Exclude rows where Transition_2 is "unknown" or Char_1 and Char_2 contain "BodyLength"
         df = df[
             (df['Transition_2'] != 'unknown') &
             (~df['Char_1'].str.contains('BodyLength')) &
             (~df['Char_2'].str.contains('BodyLength'))
         ]
-
-        # Further filtering for unknown values in Transition_1 and Transition_2
         df = df[~df['Transition_1'].str.contains('unknown', na=False) &
                 ~df['Transition_2'].str.contains('unknown', na=False)]
-
-        # Select relevant columns
-        df = df[['Char_1', 'Char_2', 'Transition_1',
-                 'Transition_2', 'C_Map_1', 'C_Map_2']]
-
-        # Clean Char_1 and Char_2 columns
-        # for col in ['Char_1', 'Char_2']:
-        #   df[col] = df[col].str.replace(r'^[AB]\.', '', regex=True)
-        #  df[col] = df[col].str.replace(r'-.*', '', regex=True).str.strip()
-
-        # Clean Transition_1, Transition_2, C_Map_1, C_Map_2 columns
+        df = df[['Char_1', 'Char_2', 'Transition_1', 'Transition_2', 'C_Map_1', 'C_Map_2']]
         for col in ['Transition_1', 'Transition_2', 'C_Map_1', 'C_Map_2']:
             df[col] = df[col].str.replace(' ', '', regex=False)
-
-        # Replace 'absent' and 'present' with 0 and 1
-        df['Transition_1'] = df['Transition_1'].str.replace(
-            'absent', '0').str.replace('present', '1')
-        df['Transition_2'] = df['Transition_2'].str.replace(
-            'absent', '0').str.replace('present', '1')
-
-        # Create a new merged index column
+        df['Transition_1'] = df['Transition_1'].str.replace('absent', '0').str.replace('present', '1')
+        df['Transition_2'] = df['Transition_2'].str.replace('absent', '0').str.replace('present', '1')
         df['Merged_Index'] = df['Char_1'] + " - " + df['Char_2']
         df = df.set_index('Merged_Index')
-
-        # Save the wrangled data
         wrangled_pairwise_path = "wrangled_pairwise.csv"
         df.to_csv(wrangled_pairwise_path, index=False)
-
-        # Return the processed dataframe and path
         return df, wrangled_pairwise_path, "subtree_output_path"
     return None, None, None
 
+def convert_tree_to_nh(uploaded_file):
+    filename = uploaded_file.name.lower()
+    suffix = os.path.splitext(filename)[1]
 
-# File upload widgets for required files
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(uploaded_file.getbuffer())
+        input_path = tmp.name
+
+    try:
+        if suffix in [".nex", ".nexus"]:
+            tree = Phylo.read(input_path, "nexus")
+            leaf_names = set()
+            for clade in tree.find_clades():
+                if not clade.clades:
+                    if clade.name:
+                        leaf_names.add(str(clade.name))
+            internal_counter = 1
+            for clade in tree.find_clades():
+                clade.branch_length = None
+                if clade.clades:
+                    existing_name = str(clade.name).strip() if clade.name is not None else ""
+                    if existing_name:
+                        clade.name = existing_name
+                    else:
+                        while True:
+                            new_name = str(internal_counter)
+                            internal_counter += 1
+                            if new_name not in leaf_names:
+                                break
+                        clade.name = new_name
+                else:
+                    if clade.name is None:
+                        raise ValueError("The NEXUS tree contains a leaf with no name.")
+                    clade.name = str(clade.name).replace(r"\_", "_").strip()
+            from io import StringIO
+            handle = StringIO()
+            Phylo.write(tree, handle, "newick")
+            newick = handle.getvalue()
+            newick = newick.replace(r"\_", "_")
+            import re
+            newick = re.sub(r":[0-9eE.+-]+", "", newick)
+            newick = re.sub(r"\s+", " ", newick).strip()
+            ete_tree = Tree(newick, format=8)
+            output_path = tempfile.NamedTemporaryFile(delete=False, suffix=".nh").name
+            ete_tree.write(outfile=output_path, format=8)
+            return output_path
+        elif suffix in [".nh", ".tree"]:
+            tree = Tree(input_path, format=8)
+            output_path = tempfile.NamedTemporaryFile(delete=False, suffix=".nh").name
+            tree.write(outfile=output_path, format=8)
+            return output_path
+        else:
+            raise ValueError(f"Unsupported tree format: {suffix}")
+    except Exception as e:
+        if os.path.exists(input_path):
+            os.remove(input_path)
+        raise ValueError(f"Could not process the tree file: {e}")
+
+# Page setup
+st.set_page_config(layout="wide")
+st.title('Parcours: Correlated Evolution Analysis')
+
+# Load CSS
+local_css("style/style.css")
+
+# --- File upload widgets ---
 st.write('Upload your phylogenetic tree and character state data:')
 extant_file = st.file_uploader("Choose extant state file", type=["csv"])
 tree_file = st.file_uploader(
-    "Choose phylogenetic tree file", type=["nh", "tree"])
+    "Upload phylogenetic tree",
+    type=["nh", "tree", "nex", "nexus"],
+    help="Supported formats: Newick (.nh, .tree) and NEXUS (.nex, .nexus). NEXUS files are automatically converted to Newick format before analysis."
+)
 
-# Update paths to point to assets/ folder
+# Relative paths for GitHub
 config_file_path = os.path.join("assets", "config1.csv")
 fixed_physical_file_path = os.path.join("assets", "physical.csv")
 
-# Store it in the session state
 st.session_state["config_file_path"] = config_file_path
 
 if tree_file is not None:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".nh") as tmp:
-        tmp.write(tree_file.getvalue())
-        st.session_state.tree_file_path = tmp.name  # Store path in session state
+    try:
+        converted_tree_path = convert_tree_to_nh(tree_file)
+        st.session_state.tree_file_path = converted_tree_path
+        if tree_file.name.lower().endswith((".nex", ".nexus")):
+            st.success(f"NEXUS file '{tree_file.name}' converted to Newick format successfully.")
+        else:
+            st.success(f"Tree file '{tree_file.name}' loaded successfully.")
+    except Exception as e:
+        st.error(str(e))
+        st.stop()
 
-# Initialize optional files
 cost_file = None
 
-
-# Function to check if specific files are referenced in the config file
 def check_file_in_config(file_path, keyword):
-    if file_path:
+    if file_path and os.path.exists(file_path):
         config_data = pd.read_csv(file_path)
-        # Flatten data to check for the presence of keywords
-        if keyword in config_data.to_string().lower():
+        if keyword.lower() in config_data.to_string().lower():
             return True
     return False
-
 
 if os.path.exists(config_file_path):
     if check_file_in_config(config_file_path, 'cost.csv'):
         st.write("Cost file is mentioned in the config file, automatically adding it to the list.")
         cost_file = st.file_uploader("Upload cost file", type=["csv"])
 
-
-# Set the Python interpreter path
 python_path = sys.executable
 
-# Function to clear output files
 def clear_output_files():
-    files_to_remove = glob.glob(
-        "*.csv") + glob.glob("*.nexus") + glob.glob("solutions/*")
+    files_to_remove = glob.glob("*.csv") + glob.glob("*.nexus") + glob.glob("solutions/*")
     for file_path in files_to_remove:
         os.remove(file_path)
 
-
-# Variable to check if analysis has been completed and wrangled data exists
 analysis_completed = False
 wrangled_pairwise_path = None
 
-
-# Button to run analysis with a spinner
 if st.button('Run Analysis'):
-    # Ensure all required files are present
     if extant_file and tree_file:
-        # Clear previous output files
         clear_output_files()
 
         with open("extant.csv", "wb") as f:
             f.write(extant_file.getbuffer())
-        with open("tree.nh", "wb") as f:
-            f.write(tree_file.getbuffer())
-        # Save optional files if uploaded
+        
+        if tree_file:
+            try:
+                converted_tree_path = convert_tree_to_nh(tree_file)
+                shutil.copy(converted_tree_path, "tree.nh")
+                st.session_state.tree_file_path = converted_tree_path
+            except Exception as e:
+                st.error(f"Unable to process tree file: {e}")
+                st.stop()
+
         if cost_file:
             with open("cost.csv", "wb") as f:
                 f.write(cost_file.getbuffer())
-    
-         # Handle config and physical files from assets/
+
         if not os.path.exists(config_file_path):
             st.error(f"Config file not found at: {config_file_path}")
-        else:
-            shutil.copy(config_file_path, "config1.csv")  
-        if not os.path.exists(fixed_physical_file_path):
+        elif not os.path.exists(fixed_physical_file_path):
             st.error(f"Physical file not found at: {fixed_physical_file_path}")
         else:
-            # Copy from assets/ to working directory
-            shutil.copy(fixed_physical_file_path, "physical.csv")        
-
-           # Define paths
-        parcours_script = r"parcours.py"
-       
-        command = [python_path, parcours_script,
+            shutil.copy(fixed_physical_file_path, "physical.csv")
+            
+            parcours_script = "parcours.py"
+            command = [python_path, parcours_script,
                        "-f", config_file_path,
                        "-t", "tree.nh",
-                       "-e", "extant.csv","-p", "pairwise.csv"]
+                       "-e", "extant.csv"]
 
-            # Include optional cost file if provided
-        if cost_file:
-            command += ["-c", "cost.csv"]
+            if cost_file:
+                command += ["-c", "cost.csv"]
 
+            command += ["-p", "pairwise.csv"]
 
-        # Run analysis with spinner
-        with st.spinner("Running analysis..."):
-            result = subprocess.run(command, capture_output=True, text=True)
+            with st.spinner("Running analysis..."):
+                result = subprocess.run(command, capture_output=True, text=True)
 
-        # Display results
-        if result.returncode == 0:
-            st.success("Analysis completed successfully!")
-            st.write(result.stdout)
-             # load the raw pairwise data and store it in session state.
-            if os.path.exists("pairwise.csv"):
-                raw_df = pd.read_csv("pairwise.csv")
-                st.session_state.raw_pairwise_df = raw_df
-            else:
-                st.error("pairwise.csv not found!")
+            if result.returncode == 0:
+                st.success("Analysis completed successfully!")
+                st.write(result.stdout)
 
-            # Proceed to wrangle data after successful analysis
-            df, wrangled_pairwise_path, subtree_path = wrangle_pairwise_data(
-                "tree.nh")
-            analysis_completed = True  # Set flag to indicate analysis is completed
+                if os.path.exists("pairwise.csv"):
+                    raw_df = pd.read_csv("pairwise.csv")
+                    st.session_state.raw_pairwise_df = raw_df
+                else:
+                    st.error("pairwise.csv not found!")
 
-            # Collect output files and check existence before adding them to the ZIP
-            output_files = ["output.csv",
-                            "pairwise.csv", "unit.csv", "solns.csv"]
-            output_dir = "solutions"
-            output_files.extend([os.path.join(output_dir, f) for f in os.listdir(
-                output_dir) if os.path.isfile(os.path.join(output_dir, f))])
-            
-            if wrangled_pairwise_path:
+                df, wrangled_pairwise_path, subtree_path = wrangle_pairwise_data("tree.nh")
+                analysis_completed = True
+
+                output_files = ["output.csv", "pairwise.csv", "unit.csv", "solns.csv"]
+                output_dir = "solutions"
+                if os.path.exists(output_dir):
+                    output_files.extend([os.path.join(output_dir, f) for f in os.listdir(output_dir)
+                                         if os.path.isfile(os.path.join(output_dir, f))])
+                if wrangled_pairwise_path:
                     output_files.append(wrangled_pairwise_path)
 
-            # Include wrangled pairwise CSV in the output files
-            output_files.append(wrangled_pairwise_path)
+                zip_path = "analysis_results.zip"
+                with zipfile.ZipFile(zip_path, 'w') as zipf:
+                    for file in output_files:
+                        if os.path.exists(file):
+                            zipf.write(file)
 
-            # Zip the output files
-            zip_path = "analysis_results.zip"
-            with zipfile.ZipFile(zip_path, 'w') as zipf:
-                for file in output_files:
-                    if os.path.exists(file):  # Only add the file if it exists
-                        zipf.write(file)
-
-            # Provide a download button for the zip file with spinner
-            with open(zip_path, "rb") as f:
-                with st.spinner("Preparing download..."):
-                    st.download_button(
-                        label="Download Analysis Results",
-                        data=f,
-                        file_name=zip_path,
-                        mime="application/zip"
-                    )
-        else:
-            st.error("Error running analysis.")
-            st.write("Return code:", result.returncode)
-            st.write("Standard Output:", result.stdout)
-            st.write("Standard Error:", result.stderr)
+                with open(zip_path, "rb") as f:
+                    with st.spinner("Preparing download..."):
+                        st.download_button(
+                            label="Download Analysis Results",
+                            data=f,
+                            file_name=zip_path,
+                            mime="application/zip")
+            else:
+                st.error("Error running analysis.")
+                st.write("Return code:", result.returncode)
+                st.write("Standard Output:", result.stdout)
+                st.write("Standard Error:", result.stderr)
     else:
         st.error("Please upload all required files.")
 
-
 def preserve_relevant_nodes(tree, annotated_leaves):
     nodes_to_preserve = set()
-
     for leaf_name in annotated_leaves:
-        # Find the target node
         target_node = tree.search_nodes(name=leaf_name)[0]
         nodes_to_preserve.add(target_node)
-
-        # Traverse up and preserve parents and siblings
         current_node = target_node.up
         while current_node:
             nodes_to_preserve.add(current_node)
-
-            # Preserve siblings of the current node
             for sibling in current_node.children:
                 nodes_to_preserve.add(sibling)
-
             current_node = current_node.up
-
-    # Return a list of nodes to preserve for later use
     return nodes_to_preserve
-
 
 def collapse_irrelevant_nodes(tree, nodes_to_preserve):
     for node in tree.traverse("postorder"):
         if node not in nodes_to_preserve and not node.is_leaf():
             node.delete(prevent_nondicotomic=False)
-
-    # Remove unnecessary single-child nodes
     tree.prune([n.name for n in nodes_to_preserve if n.name])
     return tree
 
-
 def preserve_nodes_and_find_subtree(tree, annotated_leaves, node_threshold=30):
-    # Step 1: Explicitly mark nodes to preserve
     nodes_to_preserve = set()
     for leaf_name in annotated_leaves:
         target_node = tree.search_nodes(name=leaf_name)[0]
@@ -275,72 +386,45 @@ def preserve_nodes_and_find_subtree(tree, annotated_leaves, node_threshold=30):
         current_node = target_node.up
         while current_node:
             nodes_to_preserve.add(current_node)
-            nodes_to_preserve.update(
-                current_node.children)  # Preserve siblings
+            nodes_to_preserve.update(current_node.children)
             current_node = current_node.up
 
-    # Step 2: Identify the LCA of all annotated nodes
-    node_objects = [tree.search_nodes(name=leaf_name)[0]
-                    for leaf_name in annotated_leaves]
+    node_objects = [tree.search_nodes(name=leaf_name)[0] for leaf_name in annotated_leaves]
     if len(node_objects) < 2:
-        raise ValueError(
-            "At least two annotated nodes must be found in the tree.")
+        raise ValueError("At least two annotated nodes must be found in the tree.")
 
     lca = tree.get_common_ancestor(*node_objects)
-
-    # Step 3: Expand the LCA subtree to include all explicitly preserved nodes
     expanded_nodes = set(lca.iter_descendants()) | nodes_to_preserve
+    tree.prune([node.name for node in expanded_nodes if node.name], preserve_branch_length=True)
 
-    # Step 4: Prune based on explicitly preserved nodes
-    tree.prune([node.name for node in expanded_nodes if node.name],
-               preserve_branch_length=True)
-
-    # Count nodes in the modified tree after pruning
     total_nodes_after_pruning = len(list(tree.traverse()))
-
-    # Step 5: Check if aggressive pruning is needed based on the modified tree size
     if total_nodes_after_pruning > node_threshold:
-        tree = collapse_irrelevant_nodes_1(
-            tree, nodes_to_preserve)  # Pass only preserved nodes
-        total_nodes_after_collapse = len(list(tree.traverse()))
-    else:
-        print("No aggressive pruning applied")
-
-    # Step 6: Write the modified tree to Newick format
+        tree = collapse_irrelevant_nodes_1(tree, nodes_to_preserve)
     collapsed_newick = tree.write(format=1)
     return collapsed_newick
 
-
 def collapse_irrelevant_nodes_1(tree, nodes_to_preserve):
-    # Convert preserved nodes to a set for faster lookup
     preserved_names = {n.name for n in nodes_to_preserve}
-
     for node in tree.traverse("postorder"):
         if node.name not in preserved_names and not node.is_leaf():
             node.delete(prevent_nondicotomic=False)
-
-    # Ensure we prune only those that are not preserved
     tree.prune([n.name for n in nodes_to_preserve if n.name])
-
     return tree
-
 
 def create_subtree_and_save(df, selected_rows_indices, tree_file_path, node_threshold=10):
     if not tree_file_path or not os.path.isfile(tree_file_path):
-        raise ValueError(
-            f"Tree file '{tree_file_path}' is missing or not found.")
+        raise ValueError(f"Tree file '{tree_file_path}' is missing or not found.")
 
     tree = Tree(tree_file_path, format=8)
     total_tree_nodes = len(tree)
     selected_subtree = df.loc[selected_rows_indices]
 
     if total_tree_nodes <= node_threshold:
-        subtree_newick = tree.write(format=1)  # Use format=1 to retain labels
+        subtree_newick = tree.write(format=1)
     else:
         if len(selected_subtree) == 1:
             selected_subtree = pd.DataFrame([selected_subtree.iloc[0]])
 
-        
         annotation_str = " -> ".join(f"{row['C_Map_1']} ; {row['C_Map_2']}" for _, row in selected_subtree.iterrows())
         annotations = annotation_str.split(';')
 
@@ -351,73 +435,36 @@ def create_subtree_and_save(df, selected_rows_indices, tree_file_path, node_thre
                 nodes.append(parts[1].strip())
         unique_nodes = list(set(nodes))
         st.write(unique_nodes)
-        # Remove duplicates and ensure we have at least one node
         if len(unique_nodes) < 1:
             raise ValueError("No valid nodes found in the annotations.")
 
-        # If only one node, extract the subtree for that node
         if len(unique_nodes) == 1:
             subtree = tree & unique_nodes[0]
-            # Convert subtree to Newick format string
-            # Retain internal node labels
             subtree_newick = subtree.write(format=1)
         else:
-            # Separate leaf nodes from the rest
-            leaf_nodes = [node for node in unique_nodes if tree.search_nodes(name=node)[
-                0].is_leaf()]
-
+            leaf_nodes = [node for node in unique_nodes if tree.search_nodes(name=node)[0].is_leaf()]
             if leaf_nodes:
-                # Preserve and collapse nodes for leaf nodes
                 nodes_to_preserve = preserve_relevant_nodes(tree, unique_nodes)
-                collapsed_tree = collapse_irrelevant_nodes(
-                    tree, nodes_to_preserve)
-
-                # Convert the collapsed tree to Newick format
-                subtree_newick = collapsed_tree.write(
-                    format=1)  # Retain internal node label
+                collapsed_tree = collapse_irrelevant_nodes(tree, nodes_to_preserve)
+                subtree_newick = collapsed_tree.write(format=1)
             else:
-                # Use the new function to preserve and collapse the relevant nodes
-                subtree_newick = preserve_nodes_and_find_subtree(
-                    tree, unique_nodes)
+                subtree_newick = preserve_nodes_and_find_subtree(tree, unique_nodes)
 
-    # Save the subtree (or entire tree) to a temporary file in Newick format
-    temp_subtree_file = tempfile.NamedTemporaryFile(
-        delete=False, mode="w", suffix=".nh")
+    temp_subtree_file = tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".nh")
     temp_subtree_file.write(subtree_newick)
     temp_subtree_file.close()
 
-    # Save the pairwise data (selected rows) to a temporary file
-    temp_pairwise_file = tempfile.NamedTemporaryFile(
-        delete=False, mode="w", newline="")
+    temp_pairwise_file = tempfile.NamedTemporaryFile(delete=False, mode="w", newline="")
     selected_subtree.to_csv(temp_pairwise_file.name, index=False)
     temp_pairwise_file.close()
 
     return temp_subtree_file.name, temp_pairwise_file.name
 
-# Function to inspect the CSV files created by create_subtree_and_save
-
-
-def inspect_csv_files(subtree_file, pairwise_file):
-    # Read the CSV files into DataFrames
-    subtree_df = pd.read_csv(subtree_file)
-    pairwise_df = pd.read_csv(pairwise_file)
-
-
-# Track analysis completion status in session state
 if 'analysis_completed' not in st.session_state:
     st.session_state.analysis_completed = False
 
-# Upload the tree file
-# uploaded_tree_file = st.file_uploader("Upload your tree file", type="nh")
-if tree_file is not None:
-    # Save to a temporary file and store the path
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".nh") as tmp:
-        tmp.write(tree_file.getvalue())
-        st.session_state.tree_file = tmp.name  # Store path in session state
-
-# Button to proceed to visualization
 if st.button('Proceed to Visualize Analysis'):
-    if 'tree_file' in st.session_state:
+    if 'tree_file_path' in st.session_state:
         if 'raw_pairwise_df' in st.session_state:
             st.session_state.raw_df = st.session_state.raw_pairwise_df.copy()
         else:
@@ -426,66 +473,51 @@ if st.button('Proceed to Visualize Analysis'):
     else:
         st.error("Please upload a tree file.")
 
-# Show annotation options only if analysis has been completed
 if st.session_state.analysis_completed:
-    # Ensure raw_df exists before proceeding
     if 'raw_df' in st.session_state:
-        # Place the slider at the top to select the correlation threshold
         correlation_threshold = st.slider("Select correlation threshold", min_value=0.0, max_value=1.0, value=0.25, step=0.01)
-        # Save the chosen slider value for later use
         st.session_state.correlation_threshold = correlation_threshold
 
-        # Retrieve the raw dataframe from session state
         raw_df = st.session_state.raw_df.copy()
         
-        # Apply the wrangling steps on the raw data:
-        # 1. Filter by correlation using the slider value:
         df = raw_df[raw_df['Correlation'] >= correlation_threshold]
-        
-        # 2. Exclude rows where Transition_2 is "unknown" or where Char_1 and Char_2 contain "BodyLength"
         df = df[
             (df['Transition_2'] != 'unknown') &
             (~df['Char_1'].str.contains('BodyLength')) &
             (~df['Char_2'].str.contains('BodyLength'))
         ]
-        
-        # 3. Further filter out rows where Transition_1 or Transition_2 contain "unknown"
         df = df[~df['Transition_1'].str.contains('unknown', na=False) &
                 ~df['Transition_2'].str.contains('unknown', na=False)]
-        
-        # 4. Select the relevant columns (including 'Correlation')
         df = df[['Char_1', 'Char_2', 'Transition_1', 'Transition_2', 'C_Map_1', 'C_Map_2', 'Correlation']]
         
-        # 5. Clean up the text fields for Transition and C_Map columns
         for col in ['Transition_1', 'Transition_2', 'C_Map_1', 'C_Map_2']:
             df[col] = df[col].str.replace(' ', '', regex=False)
         
-        # 6. Replace 'absent' and 'present' with 0 and 1 for the Transition columns
         df['Transition_1'] = df['Transition_1'].str.replace('absent', '0').str.replace('present', '1')
         df['Transition_2'] = df['Transition_2'].str.replace('absent', '0').str.replace('present', '1')
         
-        # 7. Create a new merged index column and set it as the index
         df['Merged_Index'] = df['Char_1'] + " - " + df['Char_2']
         df = df.set_index('Merged_Index')
         
-        # Check if the filtered dataframe is empty.
         if df.empty:
             st.error("No pairwise records meet the selected correlation threshold. Please choose a different threshold that exists in your pairwise file.")
         else:
-            # Store the filtered, wrangled data in session state
             st.session_state.df = df
-
 
     st.write("### Select Row(s) to Annotate")
 
-    # Primary annotation selection
-    annotation_1 = st.selectbox(
-        "Select Annotation:", options=st.session_state.df.index.unique(), key="annotation_1")
+    options = st.session_state.df.index.unique().tolist()
+    if not options or options == [None]:
+        st.error("No valid annotations available. Please adjust your correlation threshold.")
+    else:
+        annotation_1 = st.selectbox(
+            "Select Annotation:",
+            options=options,
+            key="annotation_1"
+        )
 
-    # Option to add a second annotation
     add_second_annotation = st.checkbox("Include a second annotation")
 
-    # Conditional second annotation selection
     annotation_2 = None
     if add_second_annotation:
         annotation_2 = st.selectbox(
@@ -495,92 +527,118 @@ if st.session_state.analysis_completed:
             key="annotation_2"
         )
 
-    # Get selected rows for the annotations
-    # Always include the first annotation
     selected_rows_indices = [annotation_1]
-    if add_second_annotation and annotation_2:  # Only add second annotation if selected
+    if add_second_annotation and annotation_2:
         selected_rows_indices.append(annotation_2)
 
-    # Ensure `selected_rows_indices` contains unique values and no multidimensional structure
     selected_rows_indices = list(set(selected_rows_indices))
 
-    # Ensure `selected_rows_indices` corresponds to actual row indices in the dataframe
     selected_subtree = st.session_state.df.loc[selected_rows_indices]
 
-    # Create and save subtree and pairwise files
     temp_subtree_file, temp_pairwise_file = create_subtree_and_save(
-        st.session_state.df, selected_rows_indices, st.session_state.tree_file)
+        st.session_state.df,
+        selected_rows_indices,
+        st.session_state.tree_file_path
+    )
 
-    # Debug print for the subtree and pairwise DataFrame
     st.write("### Pairwise DataFrame (CSV) Content")
     pairwise_df = pd.read_csv(temp_pairwise_file)
-    st.write(pairwise_df)  # Display the pairwise DataFrame in the app
+    st.write(pairwise_df)
 
-    # Print the Newick format of the subtree
     with open(temp_subtree_file, 'r') as f:
         newick_content = f.read()
         st.write("### Subtree (Newick Format) Content")
-        st.text(newick_content)  # Display the Newick formatted tree
+        st.text(newick_content)
 
-    # Conditions for visualizations
-    # Fetch selected rows for condition checks
     selected_rows = st.session_state.df.loc[selected_rows_indices]
-    if all(selected_rows["C_Map_1"].apply(lambda x: ";" not in x)) and all(selected_rows["C_Map_2"].apply(lambda x: ";" not in x)):
-        # Inspect the generated CSV files
+
+    # Route by NUMBER OF SELECTED ROWS (Fixed logic from app7)
+    if len(selected_rows) == 1:
         if st.button('Run Visualization 1'):
-            # Initialize the progress bar for visualizations
-            progress = st.progress(0)  # Set up the progress bar
+            progress = st.progress(0)
+            st.write("Selected rows for Visualization 1:", selected_rows_indices)
+            progress.progress(25)
 
-            st.write("Selected rows for Visualization 1:",
-                     selected_rows_indices)
-            progress.progress(25)  # Update progress to 25%
-
-            annotation_args = [annotation_1, annotation_2]
             result_viz1 = subprocess.run(
-                ["Rscript",
-                    "visualization1.1.R",  temp_subtree_file, temp_pairwise_file],
+                ["Rscript", "visualization1.1.R", temp_subtree_file, temp_pairwise_file],
                 capture_output=True
             )
-            progress.progress(75)  # Update progress to 50%
+            progress.progress(75)
+
             if result_viz1.returncode == 0:
                 st.success("Visualization 1 completed!")
-                progress.progress(100)  # Update progress to 100%
-
+                progress.progress(100)
                 image = Image.open("images/viz1.png")
-                st.image(
-                    image, caption="Visualization 1 with Annotations", width=1000)
+                st.image(image, caption="Visualization 1 with Annotations", width=1000)
             else:
                 st.error("Error in Visualization 1.")
-                st.write(result_viz1.stderr.decode())
-
-    elif any(selected_rows["C_Map_1"].str.contains(";")) or any(selected_rows["C_Map_2"].str.contains(";")):
-        # When running Visualization 2
+                if result_viz1.stdout:
+                    st.write("### R Output")
+                    st.code(result_viz1.stdout.decode(), language="text")
+                if result_viz1.stderr:
+                    st.write("### R Error")
+                    st.code(result_viz1.stderr.decode(), language="text")
+    else:
         if st.button('Run Visualization 2'):
-            # Initialize the progress bar for visualizations
-            progress = st.progress(0)  # Set up the progress bar
-            st.write("Selected rows for Visualization 2:",
-                     selected_rows_indices)
-            progress.progress(25)  # Update progress to 25%
+            progress = st.progress(0)
+            st.write("Selected rows for Visualization 2:", selected_rows_indices)
+            progress.progress(25)
 
-            # Run the R script for Visualization 2c:\Users\USER\OneDrive\Documents\Hello World\parcours\Home.py
             result_viz2 = subprocess.run(
-                ["Rscript",  # Path to Rscript
-                 # Path to the R script
-                 "visualization2.1.R",
-                 temp_subtree_file,  # Path to the subtree Newick file
-                 temp_pairwise_file],  # Pass the CSV file path to R script
+                ["Rscript", "visualization2.1.R", temp_subtree_file, temp_pairwise_file],
                 capture_output=True
             )
-            progress.progress(75)  # Update progress to 50%
+            progress.progress(75)
 
             if result_viz2.returncode == 0:
                 st.success("Visualization 2 completed!")
-                progress.progress(100)  # Update progress to 100%
-
-                # Assuming the R script generates a plot as 'viz2.png'
+                progress.progress(100)
+                if result_viz2.stdout:
+                    st.write("### R Debug Output")
+                    st.code(result_viz2.stdout.decode(), language="text")
                 image = Image.open("images/viz2.png")
-                st.image(
-                    image, caption="Visualization 2 with Annotations", width=1000)
+                st.image(image, caption="Visualization 2 with Annotations", width=1000)
             else:
                 st.error("Error in Visualization 2.")
-                st.write(result_viz2.stderr.decode())
+                if result_viz2.stdout:
+                    st.write("### R Output")
+                    st.code(result_viz2.stdout.decode(), language="text")
+                if result_viz2.stderr:
+                    st.write("### R Error")
+                    st.code(result_viz2.stderr.decode(), language="text")
+
+    # Heatmap section (From app7)
+    st.divider()
+    st.write("### Transition Heatmap (Node × Transition)")
+    heatmap_col_1, heatmap_col_2, heatmap_col_3 = st.columns(3)
+    with heatmap_col_1:
+        heatmap_character_filter = st.radio(
+            "Character", ["Both", "Character 1", "Character 2"],
+            key="heatmap_character_filter",
+        )
+    with heatmap_col_2:
+        heatmap_min_occurrence = st.number_input(
+            "Minimum occurrence", min_value=1, value=1, step=1,
+            key="heatmap_min_occurrence",
+        )
+    with heatmap_col_3:
+        heatmap_show_counts = st.checkbox(
+            "Show counts", value=True, key="heatmap_show_counts",
+        )
+    heatmap_use_log = st.checkbox(
+        "Use log-scaled intensity", value=True, key="heatmap_use_log",
+        help="Compresses high counts while keeping lower counts visible.",
+    )
+    if st.button("Show Heatmap", key="show_transition_heatmap"):
+        heatmap_figure = create_transition_heatmap(
+            selected_df=selected_rows,
+            subtree_file_path=temp_subtree_file,
+            character_filter=heatmap_character_filter,
+            min_occurrence=int(heatmap_min_occurrence),
+            show_counts=heatmap_show_counts,
+            use_log_scale=heatmap_use_log,
+        )
+        if heatmap_figure is None:
+            st.warning("No heatmap data matches the current filters.")
+        else:
+            st.plotly_chart(heatmap_figure, use_container_width=True)
