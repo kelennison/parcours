@@ -1,7 +1,3 @@
-# visualization2.1.R
-# Updated for GitHub deployment (Home.py)
-# Features: Adaptive line spacing, sequential cascade push, right-hand tip lane.
-
 # Load required packages
 library(tidyverse)
 library(ape)
