@@ -13,6 +13,7 @@ pairwise_df <- read.csv(pairwise_file)
 phylo_tree_new <- read.tree(subtree_file)
 tree_data_new <- fortify(phylo_tree_new, ladderize = FALSE, branch.length = "none")
 
+
 # Extract the destinations of the character-state mappings.
 pairwise_df <- pairwise_df %>%
   mutate(
@@ -144,11 +145,12 @@ draw_parallel_lines <- function(tree_plot, node_n, num_annotations, color,
 }
 
 # ============================================================
-# PLACE LINES
+# PLACE LINES (Simplified logic tracking the last y per node)
 # ============================================================
 line_y_positions <- list()
 last_y_per_node <- list()
 
+# Ensure deterministic order for the blocks
 annotation_counts <- annotation_counts %>%
   arrange(node, factor(source, levels = c("Char_1", "Char_2")), color)
 
@@ -166,6 +168,8 @@ for (j in seq_len(nrow(annotation_counts))) {
   node_y <- node_row$y
   line_spacing <- adaptive_line_spacing(node_n)
 
+  # If it's the first block at this node, start at the node.
+  # If it's a subsequent block, start one line_spacing away from the previous block's end.
   if (is.null(last_y_per_node[[node_n]])) {
     y_base <- if (is_tip) node_y - line_spacing else node_y + line_spacing
   } else {
@@ -187,6 +191,7 @@ for (j in seq_len(nrow(annotation_counts))) {
   if (is.null(line_y_positions[[node_n]])) line_y_positions[[node_n]] <- list()
   line_y_positions[[node_n]][[key]] <- source_positions
 
+  # Store the final y-position of this block so the next block can chain off it
   last_y_per_node[[node_n]] <- if (is_tip) {
     y_base - (num_annotations - 1) * line_spacing
   } else {
@@ -195,26 +200,10 @@ for (j in seq_len(nrow(annotation_counts))) {
 }
 
 # ============================================================
-# ASSIGN LABEL Y-POSITIONS (SEQUENTIAL CASCADE PUSH)
+# ASSIGN LABEL Y-POSITIONS (ANCHOR TO TOP/BOTTOM OF BLOCKS)
 # ============================================================
 label_entries$label_y <- NA_real_
-
-# 1. Get the mean of the lines for each label
-for (i in seq_len(nrow(label_entries))) {
-  node_n <- label_entries$node[i]
-  source_i <- label_entries$source[i]
-  color_i <- label_entries$color[i]
-  key <- paste0(source_i, "_", color_i)
-  
-  y_positions <- line_y_positions[[node_n]][[key]]
-  if (!is.null(y_positions)) {
-    label_entries$label_y[i] <- mean(y_positions)
-  }
-}
-
-# 2. Cascade push them apart sequentially
-min_label_sep <- 1.8   # Large enough for font size 7.76
-node_clearance <- 1.5  # Space from the node number
+label_entries$vjust_val <- 0.5
 
 for (node_n in unique(label_entries$node)) {
   idx <- which(label_entries$node == node_n)
@@ -223,26 +212,45 @@ for (node_n in unique(label_entries$node)) {
   node_row <- tree_data_new %>% filter(label == node_n)
   if (nrow(node_row) != 1) next
   is_tip <- node_row$isTip
-  node_y <- node_row$y
   
-  # Sort from closest to node to furthest
-  if (is_tip) {
-    idx <- idx[order(label_entries$label_y[idx], decreasing = TRUE)]
-  } else {
-    idx <- idx[order(label_entries$label_y[idx], decreasing = FALSE)]
-  }
+  # Ensure deterministic order (Red, Blue, Green, Yellow...)
+  color_order <- c("red", "blue", "#00B050", "#FFC000", "#800080", "#FF8C00", "black")
+  idx <- idx[order(match(label_entries$color[idx], color_order))]
   
-  current_y <- node_y
   for (k in seq_along(idx)) {
     i <- idx[k]
-    gap <- if (k == 1) node_clearance else min_label_sep
+    source_i <- label_entries$source[i]
+    color_i <- label_entries$color[i]
+    key <- paste0(source_i, "_", color_i)
     
-    if (is_tip) {
-      current_y <- min(label_entries$label_y[i], current_y - gap)
-    } else {
-      current_y <- max(label_entries$label_y[i], current_y + gap)
+    y_positions <- line_y_positions[[node_n]][[key]]
+    if (!is.null(y_positions)) {
+      
+      if (is_tip) {
+        # Tips grow downwards (smaller Y is lower)
+        if (k %% 2 == 1) {
+          # Odd blocks (1st, 3rd): Anchor at bottom of block, text grows up
+          label_entries$label_y[i] <- min(y_positions)
+          label_entries$vjust_val[i] <- 1 
+        } else {
+          # Even blocks (2nd, 4th): Anchor at top of block, text grows down
+          label_entries$label_y[i] <- max(y_positions)
+          label_entries$vjust_val[i] <- 0 
+        }
+      } else {
+        # Internal nodes grow upwards (larger Y is higher)
+        if (k %% 2 == 1) {
+          # Odd blocks: Anchor at top of block, text grows down
+          label_entries$label_y[i] <- max(y_positions)
+          label_entries$vjust_val[i] <- 0 
+        } else {
+          # Even blocks: Anchor at bottom of block, text grows up
+          label_entries$label_y[i] <- min(y_positions)
+          label_entries$vjust_val[i] <- 1 
+        }
+      }
+      
     }
-    label_entries$label_y[i] <- current_y
   }
 }
 
@@ -259,12 +267,17 @@ label_entries <- label_entries %>%
   filter(!is.na(label_y))
 
 # Tip annotations receive their own lane to the right of all species names.
+# Resolve labels vertically in that lane so nearby tips cannot print over each
+# other or over the coloured branch blocks.
+tip_label_lane_x <- max(tree_data_new$x) + 0.85
+tip_label_min_gap <- 0.42
+# Tip labels use a fixed lane outside the tree, while retaining the y-coordinate
+# of their own coloured line block. This keeps each label visually associated
+# with its annotation instead of separating it through a global reflow.
 tip_label_lane_x <- max(tree_data_new$x) + 2.5
 label_entries$tip_label_y <- label_entries$label_y
 label_entries$tip_label_x <- if_else(label_entries$isTip, tip_label_lane_x, NA_real_)
 
-# Global resolution for the right lane to ensure tips don't overlap
-tip_label_min_gap <- 1.2 
 tip_indices <- which(label_entries$isTip)
 if (length(tip_indices) > 1) {
   ordered_tip_indices <- tip_indices[order(label_entries$label_y[tip_indices])]
@@ -283,7 +296,9 @@ if (nrow(label_internal) > 0) {
     geom_text(data = label_internal,
               aes(x = internal_label_x, y = label_y,
                   label = annotation_label, color = color),
-              vjust = 0.5, hjust = 1, size = 7.76, inherit.aes = FALSE) +
+              # Use the calculated vjust to push text away from the lines
+              vjust = label_internal$vjust_val,
+              hjust = 1, size = 7.76, inherit.aes = FALSE) +
     scale_color_identity()
 }
 if (nrow(label_tips) > 0) {
@@ -294,23 +309,17 @@ if (nrow(label_tips) > 0) {
               hjust = 0, vjust = 0.5, size = 7.76, inherit.aes = FALSE) +
     scale_color_identity()
 }
-
-# ============================================================
-# CALCULATE LIMITS (EXPAND RIGHT MARGIN)
-# ============================================================
+# Calculate limits and preserve the original rendering and labels.
 min_x <- min(tree_data_new$x)
-# Ensure max_x includes the right-hand label lane
-max_x <- max(tree_data_new$x, label_entries$tip_label_x, na.rm = TRUE)
-
-margin_x_left <- 3.5
-margin_x_right <- 10.0 
-margin_y <- 1.5
-
+max_x <- max(tree_data_new$x)
 min_y <- min(tree_data_new$y, label_entries$tip_label_y, na.rm = TRUE)
 max_y <- max(tree_data_new$y, label_entries$tip_label_y, na.rm = TRUE)
+margin_x <- 5
+margin_x <- 4.5
+margin_y <- 1.5
 
 tree_plot_new <- tree_plot_new +
-  scale_x_continuous(limits = c(min_x - margin_x_left, max_x + margin_x_right)) +
+  scale_x_continuous(limits = c(min_x - margin_x, max_x + margin_x)) +
   scale_y_reverse(limits = c(max_y + margin_y, min_y - margin_y)) +
   geom_tree(color = "black", size = 1) +
   scale_color_identity()
@@ -318,4 +327,4 @@ tree_plot_new <- tree_plot_new +
 print(tree_plot_new)
 
 # Save directly to the images/ folder for the GitHub app to retrieve
-ggsave("images/viz2.png", plot = tree_plot_new, width = 24, height = 20, dpi = 300)
+ggsave("images/viz2.png", plot = tree_plot_new, width = 24, height = 20, dpi = 400)
