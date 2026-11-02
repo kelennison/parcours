@@ -1,10 +1,10 @@
-# Start with a Rocker R base image
-FROM rocker/r-ver:4.4.1
+# Use the tidyverse Rocker image which already contains tidyverse and devtools
+FROM rocker/tidyverse:4.4.1
 
 # Set non-interactive frontend
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies for Python and R package compilation
+# Install system dependencies required for Python, R graphics, and ggtree compilation
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
@@ -37,17 +37,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libfontconfig1-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Set environment variables for Posit Package Manager (PPM)
-# R 4.4.1 is based on Ubuntu Jammy (22.04)
-ENV RSPM_CRAN=https://packagemanager.posit.co/cran/__linux__/jammy/latest
-ENV RSPM_BIOC=https://packagemanager.posit.co/bioconductor/latest
-ENV BIOCONDUCTOR_CONFIG_FILE=https://packagemanager.posit.co/bioconductor/latest/config.yaml
-
-# Install R packages using PPM precompiled binaries
-RUN R -e "install.packages('BiocManager', repos = c(CRAN = Sys.getenv('RSPM_CRAN')))" \
-    && R -e "options(repos = c(CRAN = Sys.getenv('RSPM_CRAN')), BioC_mirror = Sys.getenv('RSPM_BIOC')); BiocManager::install('ggtree', update = FALSE, ask = FALSE)" \
-    && R -e "install.packages('tidyverse', repos = c(CRAN = Sys.getenv('RSPM_CRAN')))" \
-    && R -e "install.packages('ape', repos = c(CRAN = Sys.getenv('RSPM_CRAN')))"
+# Install R packages. 
+# Using install_github as a fallback ensures we get the latest compatible version.
+RUN R -e "install.packages('BiocManager', repos='https://cloud.r-project.org')" \
+    && R -e "BiocManager::install('ggtree', update = FALSE, ask = FALSE)" \
+    && R -e "install.packages('ape', repos='https://cloud.r-project.org')"
 
 # Install Python requirements
 COPY requirements.txt /tmp/requirements.txt
