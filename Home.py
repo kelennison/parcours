@@ -93,46 +93,115 @@ def create_transition_heatmap(selected_df, subtree_file_path, character_filter="
     ordered_transitions = [transition for transition, keep in zip(ordered_transitions, keep_columns) if keep]
 
     palettes = [
-        [[0, "#fff5f5"], [1, "#8b0000"]],
-        [[0, "#f2f7ff"], [1, "#08306b"]],
-        [[0, "#fffff0"], [1, "#854d0e"]],
-        [[0, "#f0fdf4"], [1, "#14532d"]],
+        [[0, "#fff5f5"], [1, "#8b0000"]], # Red (Ann 1)
+        [[0, "#f2f7ff"], [1, "#08306b"]], # Blue (Ann 2)
+        [[0, "#fffff0"], [1, "#854d0e"]], # Brown/Yellow (Ann 3)
+        [[0, "#f0fdf4"], [1, "#14532d"]], # Green (Ann 4)
     ]
     names = ["Annotation 1", "Annotation 2", "Annotation 3", "Annotation 4"]
-    traces = []
+    
+    # Base trace restores the gray background and white grid lines
+    traces = [
+        go.Heatmap(
+            z=np.zeros_like(totals),
+            x=ordered_transitions, y=ordered_nodes,
+            colorscale=[[0, "#e8e8e8"], [1, "#e8e8e8"]],
+            showscale=False, xgap=1, ygap=1, hoverinfo="skip", name="Base"
+        )
+    ]
+    
+    # Helper function for exact integers: Only puts ticks at the min and max
+    def _count_ticks(raw_max, use_log):
+        raw_max = int(max(1, raw_max))
+        if raw_max == 1:
+            stops = [1]
+        else:
+            stops = [1, raw_max]
+            
+        vals = [float(np.log1p(s)) if use_log else float(s) for s in stops]
+        return vals, [str(s) for s in stops]
+
+    active_indices = []
     for annotation_index in range(n_annotations):
         counts = count_matrices[annotation_index]
         dominant = np.argmax(count_matrices, axis=0) == annotation_index
         if not dominant.any():
             continue
+        
+        active_indices.append(annotation_index)
+        
         values = np.where(dominant, counts.astype(float), np.nan)
         if use_log_scale:
             values = np.log1p(values)
+            
         raw_maximum = max(1, int(counts[dominant].max()))
+        tickvals, ticktext = _count_ticks(raw_maximum, use_log_scale)
+        
         displayed_text = np.where(dominant, counts.astype(str), "") if show_counts else None
+        
+        # Start the colorbar at 1 (or log(1)) so Plotly doesn't draw a '0' tick
+        zmin_val = float(np.log1p(1) if use_log_scale else 1)
+        zmax_val = float(np.log1p(raw_maximum) if use_log_scale else raw_maximum)
+        
         traces.append(go.Heatmap(
             z=values, x=ordered_transitions, y=ordered_nodes,
             text=displayed_text, texttemplate="%{text}",
-            colorscale=palettes[annotation_index], zmin=0,
-            zmax=float(np.log1p(raw_maximum) if use_log_scale else raw_maximum),
+            colorscale=palettes[annotation_index], 
+            zmin=zmin_val,
+            zmax=zmax_val,
             xgap=1, ygap=1, hoverongaps=False,
             hovertemplate="<b>Node:</b> %{y}<br><b>Transition:</b> %{x}<br><b>Count:</b> %{text}<extra></extra>",
-            colorbar=dict(title=names[annotation_index], x=1.02,
-                          y=0.88 - annotation_index * 0.23, len=0.18,
-                          thickness=14),
+            colorbar=dict(
+                title=dict(
+                    text=names[annotation_index], 
+                    side="top",
+                    font=dict(color="#111111", size=11)
+                ), 
+                x=1.02, thickness=14,
+                tickfont=dict(color="#111111"),
+                tickmode="array", 
+                tickvals=tickvals, ticktext=ticktext,
+                outlinewidth=0,
+            ),
         ))
+
+    # Dynamically space colorbars using almost the full height of the plot
+    n_active = len(active_indices)
+    for i, trace in enumerate(traces[1:]):
+        item_height = 0.85 / n_active
+        cb_len = item_height * 0.65  # Use 65% of the block for the bar, leaving gap
+        y_center = 1.0 - (i * item_height) - (item_height / 2)
+        
+        trace.colorbar.y = y_center
+        trace.colorbar.len = cb_len
 
     figure = go.Figure(traces)
     figure.update_layout(
         template="plotly_white",
-        title="Node × Transition heatmap — darker = higher count",
-        xaxis=dict(title="Transition", showgrid=False),
-        yaxis=dict(title="Node / evolutionary position", autorange="reversed",
-                   tickmode="array", tickvals=ordered_nodes,
-                   ticktext=[_format_node_label(node) for node in ordered_nodes],
-                   showgrid=False),
-        plot_bgcolor="#e8e8e8", height=max(440, 30 * len(ordered_nodes) + 220),
-        margin=dict(l=260, r=260, t=90, b=90), showlegend=False,
+        title=dict(
+            text="Node × Transition heatmap — darker = higher count",
+            font=dict(color="#111111", size=15),
+            x=0.02, xanchor="left"
+        ),
+        xaxis=dict(
+            title=dict(text="Transition", font=dict(color="#111111")), 
+            showgrid=False,
+            tickfont=dict(color="#111111")
+        ),
+        yaxis=dict(
+            title=dict(text="Node / evolutionary position", font=dict(color="#111111")),
+            autorange="reversed",
+            tickmode="array", tickvals=ordered_nodes,
+            ticktext=[_format_node_label(node) for node in ordered_nodes],
+            showgrid=False,
+            tickfont=dict(color="#111111")
+        ),
+        plot_bgcolor="white", 
+        paper_bgcolor="white",
+        # Increased height from 440 to 600 to give the colorbars room to breathe
+        height=max(600, 35 * len(ordered_nodes) + 250),
+        margin=dict(l=260, r=260, t=90, b=90), 
+        showlegend=False,
     )
     return figure
 
