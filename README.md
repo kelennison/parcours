@@ -45,8 +45,6 @@ Visualization 1: Generates a standard tree for a single annotated branch.
 
 Visualization 2: Generates a tree for multiple correlated transitions. This script uses dynamic line spacing to stack parallel colored lines without overlap.
 
-Colors are automatically assigned in pairs: Red/Blue (1st), Green/Yellow (2nd), and Purple/Orange (3rd).
-
 The R backend runs in the background and returns a high-resolution .png image directly to your screen.
 
 Step 5: Explore the Interactive Heatmap
