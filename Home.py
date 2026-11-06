@@ -13,6 +13,7 @@ from Bio import Phylo
 import numpy as np
 import plotly.graph_objects as go
 from collections import defaultdict
+import textwrap  # Add this to your imports at the top of app8.py
 
 # Use local CSS (from Home.py)
 def local_css(file_name):
