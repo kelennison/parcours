@@ -41,7 +41,6 @@ def _format_node_label(node_name):
     return node_name.replace("->", " → ")
 
 
-
 def create_transition_heatmap(selected_df, subtree_file_path, character_filter="Both",
                               min_occurrence=1, show_counts=True,
                               use_log_scale=True):
@@ -211,8 +210,6 @@ def create_transition_heatmap(selected_df, subtree_file_path, character_filter="
         showlegend=False,
     )
     return figure
-
-
 
 def wrangle_pairwise_data(tree_path):
     pairwise_path = "pairwise.csv"
@@ -686,52 +683,52 @@ if st.session_state.analysis_completed:
                     st.code(result_viz2.stderr.decode(), language="text")
 
     # Heatmap section (From app7)
-   st.divider()
-       st.write("### Transition Heatmap (Node × Transition)")
-   
-       # Display exactly what is being plotted (Answers Soyong's question)
-       char_names = ", ".join([f"**{name}**" for name in selected_rows.index])
-       st.info(
-           f"**Characters analyzed:** {char_names}\n\n"
-           "**How to read this:** Each cell represents the number of times a specific transition "
-           "(e.g., state 4 → 2) occurred for the associated character at that evolutionary node."
-       )
-   
-       heatmap_col_1, heatmap_col_2, heatmap_col_3 = st.columns(3)
-       
-       with heatmap_col_1:
-           heatmap_character_filter = st.radio(
-               "Character", ["Both", "Character 1", "Character 2"],
-               key="heatmap_character_filter",
-           )
-           
-       with heatmap_col_2:
-           heatmap_min_occurrence = st.number_input(
-               "Minimum occurrence", min_value=1, value=1, step=1,
-               key="heatmap_min_occurrence",
-           )
-           
-       with heatmap_col_3:
-           heatmap_show_counts = st.checkbox(
-               "Show counts", value=True, key="heatmap_show_counts",
-           )
-           
-       heatmap_use_log = st.checkbox(
-           "Use log-scaled intensity", value=True, key="heatmap_use_log",
-           help="Compresses high counts while keeping lower counts visible.",
-       )
-   
-       if st.button("Show Heatmap", key="show_transition_heatmap"):
-           heatmap_figure = create_transition_heatmap(
-               selected_df=selected_rows,
-               subtree_file_path=temp_subtree_file,
-               character_filter=heatmap_character_filter,
-               min_occurrence=int(heatmap_min_occurrence),
-               show_counts=heatmap_show_counts,
-               use_log_scale=heatmap_use_log,
-           )
-           
-           if heatmap_figure is None:
-               st.warning("No heatmap data matches the current filters.")
-           else:
-               st.plotly_chart(heatmap_figure, use_container_width=True)
+    st.divider()
+    st.write("### Transition Heatmap (Node × Transition)")
+
+    # Display exactly what is being plotted (Answers Soyong's question)
+    char_names = ", ".join([f"**{name}**" for name in selected_rows.index])
+    st.info(
+        f"**Characters analyzed:** {char_names}\n\n"
+        "**How to read this:** Each cell represents the number of times a specific transition "
+        "(e.g., state 4 → 2) occurred for the associated character at that evolutionary node."
+    )
+
+    heatmap_col_1, heatmap_col_2, heatmap_col_3 = st.columns(3)
+    
+    with heatmap_col_1:
+        heatmap_character_filter = st.radio(
+            "Character", ["Both", "Character 1", "Character 2"],
+            key="heatmap_character_filter",
+        )
+        
+    with heatmap_col_2:
+        heatmap_min_occurrence = st.number_input(
+            "Minimum occurrence", min_value=1, value=1, step=1,
+            key="heatmap_min_occurrence",
+        )
+        
+    with heatmap_col_3:
+        heatmap_show_counts = st.checkbox(
+            "Show counts", value=True, key="heatmap_show_counts",
+        )
+        
+    heatmap_use_log = st.checkbox(
+        "Use log-scaled intensity", value=True, key="heatmap_use_log",
+        help="Compresses high counts while keeping lower counts visible.",
+    )
+
+    if st.button("Show Heatmap", key="show_transition_heatmap"):
+        heatmap_figure = create_transition_heatmap(
+            selected_df=selected_rows,
+            subtree_file_path=temp_subtree_file,
+            character_filter=heatmap_character_filter,
+            min_occurrence=int(heatmap_min_occurrence),
+            show_counts=heatmap_show_counts,
+            use_log_scale=heatmap_use_log,
+        )
+        
+        if heatmap_figure is None:
+            st.warning("No heatmap data matches the current filters.")
+        else:
+            st.plotly_chart(heatmap_figure, use_container_width=True)
