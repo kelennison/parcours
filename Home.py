@@ -41,11 +41,17 @@ def _format_node_label(node_name):
     return node_name.replace("->", " → ")
 
 
+
 def create_transition_heatmap(selected_df, subtree_file_path, character_filter="Both",
                               min_occurrence=1, show_counts=True,
                               use_log_scale=True):
     """Build the app7 node × transition heatmap for up to four selections."""
     n_annotations = min(len(selected_df), 4)
+    
+    # Extract the actual character names from the selected dataframe index
+    # (e.g., "A. BodyLength - B. TailLength")
+    annotation_names = [str(idx) for idx in selected_df.index[:n_annotations]]
+    
     cell_counts = defaultdict(lambda: np.zeros(4, dtype=int))
 
     for annotation_index, (_, row) in enumerate(selected_df.iterrows()):
@@ -93,12 +99,11 @@ def create_transition_heatmap(selected_df, subtree_file_path, character_filter="
     ordered_transitions = [transition for transition, keep in zip(ordered_transitions, keep_columns) if keep]
 
     palettes = [
-        [[0, "#fff5f5"], [1, "#8b0000"]], # Red (Ann 1)
-        [[0, "#f2f7ff"], [1, "#08306b"]], # Blue (Ann 2)
-        [[0, "#fffff0"], [1, "#854d0e"]], # Brown/Yellow (Ann 3)
-        [[0, "#f0fdf4"], [1, "#14532d"]], # Green (Ann 4)
+        [[0, "#fff5f5"], [1, "#8b0000"]], # Red
+        [[0, "#f2f7ff"], [1, "#08306b"]], # Blue
+        [[0, "#fffff0"], [1, "#854d0e"]], # Brown/Yellow
+        [[0, "#f0fdf4"], [1, "#14532d"]], # Green
     ]
-    names = ["Annotation 1", "Annotation 2", "Annotation 3", "Annotation 4"]
     
     # Base trace restores the gray background and white grid lines
     traces = [
@@ -110,14 +115,9 @@ def create_transition_heatmap(selected_df, subtree_file_path, character_filter="
         )
     ]
     
-    # Helper function for exact integers: Only puts ticks at the min and max
     def _count_ticks(raw_max, use_log):
         raw_max = int(max(1, raw_max))
-        if raw_max == 1:
-            stops = [1]
-        else:
-            stops = [1, raw_max]
-            
+        stops = [1, raw_max] if raw_max > 1 else [1]
         vals = [float(np.log1p(s)) if use_log else float(s) for s in stops]
         return vals, [str(s) for s in stops]
 
@@ -139,21 +139,30 @@ def create_transition_heatmap(selected_df, subtree_file_path, character_filter="
         
         displayed_text = np.where(dominant, counts.astype(str), "") if show_counts else None
         
-        # Start the colorbar at 1 (or log(1)) so Plotly doesn't draw a '0' tick
         zmin_val = float(np.log1p(1) if use_log_scale else 1)
         zmax_val = float(np.log1p(raw_maximum) if use_log_scale else raw_maximum)
+        
+        # Wrap long character names for the legend
+        display_name = "<br>".join(textwrap.wrap(annotation_names[annotation_index], width=25))
+        
+        # Include the character name in the hover template
+        hover_text = (
+            f"<b>Characters:</b> {annotation_names[annotation_index]}<br>"
+            "<b>Node:</b> %{y}<br>"
+            "<b>Transition:</b> %{x}<br>"
+            "<b>Count:</b> %{text}<extra></extra>"
+        )
         
         traces.append(go.Heatmap(
             z=values, x=ordered_transitions, y=ordered_nodes,
             text=displayed_text, texttemplate="%{text}",
             colorscale=palettes[annotation_index], 
-            zmin=zmin_val,
-            zmax=zmax_val,
+            zmin=zmin_val, zmax=zmax_val,
             xgap=1, ygap=1, hoverongaps=False,
-            hovertemplate="<b>Node:</b> %{y}<br><b>Transition:</b> %{x}<br><b>Count:</b> %{text}<extra></extra>",
+            hovertemplate=hover_text,
             colorbar=dict(
                 title=dict(
-                    text=names[annotation_index], 
+                    text=display_name, 
                     side="top",
                     font=dict(color="#111111", size=11)
                 ), 
@@ -165,11 +174,10 @@ def create_transition_heatmap(selected_df, subtree_file_path, character_filter="
             ),
         ))
 
-    # Dynamically space colorbars using almost the full height of the plot
     n_active = len(active_indices)
     for i, trace in enumerate(traces[1:]):
         item_height = 0.85 / n_active
-        cb_len = item_height * 0.65  # Use 65% of the block for the bar, leaving gap
+        cb_len = item_height * 0.65 
         y_center = 1.0 - (i * item_height) - (item_height / 2)
         
         trace.colorbar.y = y_center
@@ -179,12 +187,12 @@ def create_transition_heatmap(selected_df, subtree_file_path, character_filter="
     figure.update_layout(
         template="plotly_white",
         title=dict(
-            text="Node × Transition heatmap — darker = higher count",
+            text="Node × Transition heatmap",
             font=dict(color="#111111", size=15),
             x=0.02, xanchor="left"
         ),
         xaxis=dict(
-            title=dict(text="Transition", font=dict(color="#111111")), 
+            title=dict(text="Transition (State → State)", font=dict(color="#111111")), 
             showgrid=False,
             tickfont=dict(color="#111111")
         ),
@@ -198,12 +206,13 @@ def create_transition_heatmap(selected_df, subtree_file_path, character_filter="
         ),
         plot_bgcolor="white", 
         paper_bgcolor="white",
-        # Increased height from 440 to 600 to give the colorbars room to breathe
         height=max(600, 35 * len(ordered_nodes) + 250),
-        margin=dict(l=260, r=260, t=90, b=90), 
+        margin=dict(l=280, r=280, t=90, b=90), 
         showlegend=False,
     )
     return figure
+
+
 
 def wrangle_pairwise_data(tree_path):
     pairwise_path = "pairwise.csv"
@@ -677,37 +686,52 @@ if st.session_state.analysis_completed:
                     st.code(result_viz2.stderr.decode(), language="text")
 
     # Heatmap section (From app7)
-    st.divider()
-    st.write("### Transition Heatmap (Node × Transition)")
-    heatmap_col_1, heatmap_col_2, heatmap_col_3 = st.columns(3)
-    with heatmap_col_1:
-        heatmap_character_filter = st.radio(
-            "Character", ["Both", "Character 1", "Character 2"],
-            key="heatmap_character_filter",
-        )
-    with heatmap_col_2:
-        heatmap_min_occurrence = st.number_input(
-            "Minimum occurrence", min_value=1, value=1, step=1,
-            key="heatmap_min_occurrence",
-        )
-    with heatmap_col_3:
-        heatmap_show_counts = st.checkbox(
-            "Show counts", value=True, key="heatmap_show_counts",
-        )
-    heatmap_use_log = st.checkbox(
-        "Use log-scaled intensity", value=True, key="heatmap_use_log",
-        help="Compresses high counts while keeping lower counts visible.",
-    )
-    if st.button("Show Heatmap", key="show_transition_heatmap"):
-        heatmap_figure = create_transition_heatmap(
-            selected_df=selected_rows,
-            subtree_file_path=temp_subtree_file,
-            character_filter=heatmap_character_filter,
-            min_occurrence=int(heatmap_min_occurrence),
-            show_counts=heatmap_show_counts,
-            use_log_scale=heatmap_use_log,
-        )
-        if heatmap_figure is None:
-            st.warning("No heatmap data matches the current filters.")
-        else:
-            st.plotly_chart(heatmap_figure, use_container_width=True)
+   st.divider()
+       st.write("### Transition Heatmap (Node × Transition)")
+   
+       # Display exactly what is being plotted (Answers Soyong's question)
+       char_names = ", ".join([f"**{name}**" for name in selected_rows.index])
+       st.info(
+           f"**Characters analyzed:** {char_names}\n\n"
+           "**How to read this:** Each cell represents the number of times a specific transition "
+           "(e.g., state 4 → 2) occurred for the associated character at that evolutionary node."
+       )
+   
+       heatmap_col_1, heatmap_col_2, heatmap_col_3 = st.columns(3)
+       
+       with heatmap_col_1:
+           heatmap_character_filter = st.radio(
+               "Character", ["Both", "Character 1", "Character 2"],
+               key="heatmap_character_filter",
+           )
+           
+       with heatmap_col_2:
+           heatmap_min_occurrence = st.number_input(
+               "Minimum occurrence", min_value=1, value=1, step=1,
+               key="heatmap_min_occurrence",
+           )
+           
+       with heatmap_col_3:
+           heatmap_show_counts = st.checkbox(
+               "Show counts", value=True, key="heatmap_show_counts",
+           )
+           
+       heatmap_use_log = st.checkbox(
+           "Use log-scaled intensity", value=True, key="heatmap_use_log",
+           help="Compresses high counts while keeping lower counts visible.",
+       )
+   
+       if st.button("Show Heatmap", key="show_transition_heatmap"):
+           heatmap_figure = create_transition_heatmap(
+               selected_df=selected_rows,
+               subtree_file_path=temp_subtree_file,
+               character_filter=heatmap_character_filter,
+               min_occurrence=int(heatmap_min_occurrence),
+               show_counts=heatmap_show_counts,
+               use_log_scale=heatmap_use_log,
+           )
+           
+           if heatmap_figure is None:
+               st.warning("No heatmap data matches the current filters.")
+           else:
+               st.plotly_chart(heatmap_figure, use_container_width=True)
