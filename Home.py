@@ -14,6 +14,8 @@ import numpy as np
 import plotly.graph_objects as go
 from collections import defaultdict
 import textwrap  # Add this to your imports at the top of app8.py
+import plotly.colors as pc
+
 
 # Use local CSS (from Home.py)
 def local_css(file_name):
@@ -40,6 +42,27 @@ def _format_node_label(node_name):
         return ""
     node_name = str(node_name).strip()
     return node_name.replace("->", " → ")
+
+
+def get_distinct_colors(n):
+    """Generate a list of highly distinct colors for the transitions."""
+    palettes = [
+        pc.qualitative.Plotly,
+        pc.qualitative.D3,
+        pc.qualitative.Alphabet,
+        pc.qualitative.Dark24,
+        pc.qualitative.Light24
+    ]
+    all_colors = []
+    for p in palettes:
+        all_colors.extend(p)
+    return all_colors[:n]
+
+def hex_to_rgba(hex_color, alpha):
+    """Convert a hex color to an rgba string for transparent gradients."""
+    hex_color = hex_color.lstrip('#')
+    r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    return f"rgba({r},{g},{b},{alpha})"
 
 
 def create_transition_heatmap(selected_df, subtree_file_path, character_filter="Both",
