@@ -45,27 +45,37 @@ def _format_node_label(node_name):
 def create_transition_heatmap(selected_df, subtree_file_path, character_filter="Both",
                               min_occurrence=1, show_counts=True,
                               use_log_scale=True):
-    """Build the app7 node × transition heatmap for up to four selections."""
+    """Build the Node × Transition heatmap with distinct colors mapped to transitions."""
     n_annotations = min(len(selected_df), 4)
     
-    # Extract the actual character names from the selected dataframe index
-    # (e.g., "A. BodyLength - B. TailLength")
-    annotation_names = [str(idx) for idx in selected_df.index[:n_annotations]]
-    
-    cell_counts = defaultdict(lambda: np.zeros(4, dtype=int))
+    # We will track the specific character names (e.g., "A.Gestation") per column
+    cell_counts = defaultdict(int)
+    cell_char_names = defaultdict(set)
+    col_char_names = defaultdict(set)
 
     for annotation_index, (_, row) in enumerate(selected_df.iterrows()):
         if annotation_index >= 4:
             break
-        for character, transition_column, cmap_column in (
-            ("Character 1", "Transition_1", "C_Map_1"),
-            ("Character 2", "Transition_2", "C_Map_2"),
-        ):
-            if character_filter not in ("Both", character):
-                continue
-            transition = str(row[transition_column]).strip()
-            for node in _split_cmap(row[cmap_column]):
-                cell_counts[(node, transition)][annotation_index] += 1
+            
+        # 1. Character 1 maps STRICTLY to Transition 1, C_Map 1, and Char_1
+        if character_filter in ("Both", "Character 1"):
+            trans = str(row["Transition_1"]).strip()
+            char_name = str(row["Char_1"]).strip()
+            key = ("Char 1", trans)
+            col_char_names[key].add(char_name)
+            for node in _split_cmap(row["C_Map_1"]):
+                cell_counts[(node, key)] += 1
+                cell_char_names[(node, key)].add(char_name)
+                
+        # 2. Character 2 maps STRICTLY to Transition 2, C_Map 2, and Char_2
+        if character_filter in ("Both", "Character 2"):
+            trans = str(row["Transition_2"]).strip()
+            char_name = str(row["Char_2"]).strip()
+            key = ("Char 2", trans)
+            col_char_names[key].add(char_name)
+            for node in _split_cmap(row["C_Map_2"]):
+                cell_counts[(node, key)] += 1
+                cell_char_names[(node, key)].add(char_name)
 
     if not cell_counts:
         return None
@@ -79,106 +89,116 @@ def create_transition_heatmap(selected_df, subtree_file_path, character_filter="
     observed_nodes = {node for node, _ in cell_counts}
     ordered_nodes = [node for node in tree_order if node in observed_nodes]
     ordered_nodes.extend(sorted(observed_nodes - set(ordered_nodes)))
-    ordered_transitions = sorted({transition for _, transition in cell_counts})
-
-    count_matrices = np.zeros((4, len(ordered_nodes), len(ordered_transitions)), dtype=int)
-    for row_index, node in enumerate(ordered_nodes):
-        for column_index, transition in enumerate(ordered_transitions):
-            counts = cell_counts.get((node, transition))
-            if counts is not None and counts.sum() >= min_occurrence:
-                count_matrices[:, row_index, column_index] = counts
-
-    totals = count_matrices.sum(axis=0)
-    if not totals.any():
-        return None
-    keep_rows = totals.sum(axis=1) > 0
-    keep_columns = totals.sum(axis=0) > 0
-    count_matrices = count_matrices[:, keep_rows][:, :, keep_columns]
-    totals = totals[keep_rows][:, keep_columns]
-    ordered_nodes = [node for node, keep in zip(ordered_nodes, keep_rows) if keep]
-    ordered_transitions = [transition for transition, keep in zip(ordered_transitions, keep_columns) if keep]
-
-    palettes = [
-        [[0, "#fff5f5"], [1, "#8b0000"]], # Red
-        [[0, "#f2f7ff"], [1, "#08306b"]], # Blue
-        [[0, "#fffff0"], [1, "#854d0e"]], # Brown/Yellow
-        [[0, "#f0fdf4"], [1, "#14532d"]], # Green
-    ]
     
-    # Base trace restores the gray background and white grid lines
+    # Get unique columns (e.g., ("Char 1", "4->3") and ("Char 2", "4->3"))
+    ordered_columns = sorted({col_key for _, col_key in cell_counts})
+    
+    # Create clean x-axis labels (bottom of the heatmap)
+    x_labels = []
+    for char_type, trans in ordered_columns:
+        if character_filter == "Both":
+            x_labels.append(f"{trans} ({char_type})")
+        else:
+            x_labels.append(trans)
+
+    counts = np.zeros((len(ordered_nodes), len(ordered_columns)), dtype=int)
+    hover_texts = np.full((len(ordered_nodes), len(ordered_columns)), "", dtype=object)
+
+    for r_idx, node in enumerate(ordered_nodes):
+        for c_idx, col_key in enumerate(ordered_columns):
+            val = cell_counts.get((node, col_key), 0)
+            if val >= min_occurrence:
+                counts[r_idx, c_idx] = val
+                char_names = sorted(cell_char_names.get((node, col_key), []))
+                # Just list the character name(s), no ": count" appended
+                hover_texts[r_idx, c_idx] = ", ".join(char_names)
+
+    distinct_colors = get_distinct_colors(len(ordered_columns))
+
     traces = [
         go.Heatmap(
-            z=np.zeros_like(totals),
-            x=ordered_transitions, y=ordered_nodes,
+            z=np.zeros_like(counts),
+            x=x_labels, y=ordered_nodes,
             colorscale=[[0, "#e8e8e8"], [1, "#e8e8e8"]],
             showscale=False, xgap=1, ygap=1, hoverinfo="skip", name="Base"
         )
     ]
-    
-    def _count_ticks(raw_max, use_log):
-        raw_max = int(max(1, raw_max))
-        stops = [1, raw_max] if raw_max > 1 else [1]
-        vals = [float(np.log1p(s)) if use_log else float(s) for s in stops]
-        return vals, [str(s) for s in stops]
 
-    active_indices = []
-    for annotation_index in range(n_annotations):
-        counts = count_matrices[annotation_index]
-        dominant = np.argmax(count_matrices, axis=0) == annotation_index
-        if not dominant.any():
-            continue
+    for j, col_key in enumerate(ordered_columns):
+        char_type, trans = col_key
+        col_data = counts[:, j]
+        max_val = max(1, int(col_data.max()))
         
-        active_indices.append(annotation_index)
+        z = np.full_like(counts, np.nan, dtype=float)
+        z[:, j] = np.where(col_data > 0, col_data, np.nan)
         
-        values = np.where(dominant, counts.astype(float), np.nan)
+        zmin_val = 0.0
         if use_log_scale:
-            values = np.log1p(values)
+            z[:, j] = np.log1p(z[:, j])
+            zmax_val = float(np.log1p(max_val))
+        else:
+            zmax_val = float(max_val)
             
-        raw_maximum = max(1, int(counts[dominant].max()))
-        tickvals, ticktext = _count_ticks(raw_maximum, use_log_scale)
+        text = np.full(counts.shape, "", dtype=object)
+        if show_counts:
+            text[:, j] = [str(int(c)) if c > 0 else "0" for c in col_data]
+
+        if max_val > 1:
+            tickvals = [zmin_val, zmax_val]
+            ticktext = ["0", str(max_val)]
+        else:
+            tickvals = [zmin_val]
+            ticktext = ["0"]
+
+        base_color = distinct_colors[j]
+        light_color = hex_to_rgba(base_color, 0.05)
         
-        displayed_text = np.where(dominant, counts.astype(str), "") if show_counts else None
+        # Build the legend title using the specific character name(s)
+        col_chars = sorted(col_char_names.get(col_key, []))
+        char_title = f"<b>{', '.join(col_chars)}</b>"
+        if character_filter == "Both":
+            # If they share the same transition, make it clear which Char is which
+            char_title = f"<b>{char_type}: {', '.join(col_chars)}</b>"
         
-        zmin_val = float(np.log1p(1) if use_log_scale else 1)
-        zmax_val = float(np.log1p(raw_maximum) if use_log_scale else raw_maximum)
-        
-        # Wrap long character names for the legend
-        display_name = "<br>".join(textwrap.wrap(annotation_names[annotation_index], width=25))
-        
-        # Include the character name in the hover template
-        hover_text = (
-            f"<b>Characters:</b> {annotation_names[annotation_index]}<br>"
-            "<b>Node:</b> %{y}<br>"
-            "<b>Transition:</b> %{x}<br>"
-            "<b>Count:</b> %{text}<extra></extra>"
-        )
-        
+        # Character on top, Transition underneath
+        legend_title = f"{char_title}<br><span style='font-size:10px;color:#555'>Transition {trans}</span>"
+
         traces.append(go.Heatmap(
-            z=values, x=ordered_transitions, y=ordered_nodes,
-            text=displayed_text, texttemplate="%{text}",
-            colorscale=palettes[annotation_index], 
+            z=z, x=x_labels, y=ordered_nodes,
+            text=text, texttemplate="%{text}", textfont=dict(color="#111111"),
+            customdata=hover_texts,
+            colorscale=[[0, light_color], [1, base_color]],
             zmin=zmin_val, zmax=zmax_val,
             xgap=1, ygap=1, hoverongaps=False,
-            hovertemplate=hover_text,
+            hovertemplate=(
+                "<b>Character:</b> %{customdata}<br>"
+                f"<b>Transition:</b> {trans}<br>"
+                "<b>Node:</b> %{y}<br>"
+                "<b>Count:</b> %{text}<br>"
+                "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+                "<extra></extra>"
+            ),
             colorbar=dict(
                 title=dict(
-                    text=display_name, 
+                    text=legend_title, 
                     side="top",
                     font=dict(color="#111111", size=11)
                 ), 
                 x=1.02, thickness=14,
-                tickfont=dict(color="#111111"),
+                tickfont=dict(color="#111111", size=11),
                 tickmode="array", 
                 tickvals=tickvals, ticktext=ticktext,
                 outlinewidth=0,
             ),
         ))
 
-    n_active = len(active_indices)
+    # --- SPACING FIX: Make colorbars much longer ---
+    n_transitions = len(ordered_columns)
     for i, trace in enumerate(traces[1:]):
-        item_height = 0.85 / n_active
-        cb_len = item_height * 0.65 
-        y_center = 1.0 - (i * item_height) - (item_height / 2)
+        slot_height = 1.0 / n_transitions
+        cb_len = slot_height * 0.80 
+        y_top = 1.0 - (i * slot_height)
+        y_center = y_top - (slot_height / 2) - 0.02
         
         trace.colorbar.y = y_center
         trace.colorbar.len = cb_len
@@ -206,7 +226,7 @@ def create_transition_heatmap(selected_df, subtree_file_path, character_filter="
         ),
         plot_bgcolor="white", 
         paper_bgcolor="white",
-        height=max(600, 35 * len(ordered_nodes) + 250),
+        height=max(800, 45 * len(ordered_nodes) + 350),
         margin=dict(l=280, r=280, t=90, b=90), 
         showlegend=False,
     )

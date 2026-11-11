@@ -65,23 +65,39 @@ label_entries <- label_entries %>%
   group_by(node, source, annotation_key) %>%
   summarise(count = sum(count), .groups = "drop")
 
-# Assign colors based on rank of unique annotations per node.
-# 1st = red/blue, 2nd = green/yellow, 3rd = purple/orange
+# Assign colors based on unique transitions globally (not just character name)
+unique_transitions <- unique(label_entries$annotation_key)
+
+# Ultra-high-contrast, deeply saturated colors for maximum visibility
+base_colors <- c(
+  "#e6194B", # Vivid Red/Crimson
+  "#4363d8", # Strong Blue
+  "#3cb44b", # Vivid Green
+  "#f58231", # Bright Orange (clearly distinct from red)
+  "#911eb4", # Deep Purple
+  "#42d4f4", # Bright Cyan
+  "#f032e6", # Hot Magenta
+  "#9A6324", # Dark Brown
+  "#808000", # Olive
+  "#000075", # Navy Blue
+  "#800000", # Maroon
+  "#469990", # Dark Teal
+  "#dcbeff", # Light Lavender (if needed for many transitions)
+  "#000000"  # Black
+)
+
+if (length(unique_transitions) > length(base_colors)) {
+  color_palette <- colorRampPalette(base_colors)(length(unique_transitions))
+} else {
+  color_palette <- base_colors[1:length(unique_transitions)]
+}
+
+color_map <- setNames(color_palette, unique_transitions)
+
 label_entries <- label_entries %>%
   arrange(node, factor(source, levels = c("Char_1", "Char_2")), annotation_key) %>%
-  group_by(node, source) %>%
-  mutate(source_rank = row_number()) %>%
-  ungroup() %>%
   mutate(
-    color = case_when(
-      source == "Char_1" & source_rank == 1 ~ "red",
-      source == "Char_2" & source_rank == 1 ~ "blue",
-      source == "Char_1" & source_rank == 2 ~ "#00B050", # Green
-      source == "Char_2" & source_rank == 2 ~ "#FFC000", # Yellow
-      source == "Char_1" & source_rank == 3 ~ "#800080", # Purple
-      source == "Char_2" & source_rank == 3 ~ "#FF8C00", # Orange
-      TRUE ~ "black"
-    ),
+    color = color_map[annotation_key],
     annotation_label = paste0(annotation_key, " (", count, "x)")
   )
 
@@ -138,7 +154,7 @@ draw_parallel_lines <- function(tree_plot, node_n, num_annotations, color,
     tree_plot <- tree_plot +
       annotate("segment", x = parent_node_coords$x, xend = current_node_coords$x,
                y = y_line, yend = y_line, color = color,
-               linetype = "solid", linewidth = 0.6)
+               linetype = "solid", linewidth = 1.2) # Slightly thicker line for better visibility
   }
   tree_plot
 }
@@ -167,8 +183,6 @@ for (j in seq_len(nrow(annotation_counts))) {
   node_y <- node_row$y
   line_spacing <- adaptive_line_spacing(node_n)
 
-  # If it's the first block at this node, start at the node.
-  # If it's a subsequent block, start one line_spacing away from the previous block's end.
   if (is.null(last_y_per_node[[node_n]])) {
     y_base <- if (is_tip) node_y - line_spacing else node_y + line_spacing
   } else {
@@ -190,7 +204,6 @@ for (j in seq_len(nrow(annotation_counts))) {
   if (is.null(line_y_positions[[node_n]])) line_y_positions[[node_n]] <- list()
   line_y_positions[[node_n]][[key]] <- source_positions
 
-  # Store the final y-position of this block so the next block can chain off it
   last_y_per_node[[node_n]] <- if (is_tip) {
     y_base - (num_annotations - 1) * line_spacing
   } else {
@@ -212,10 +225,6 @@ for (node_n in unique(label_entries$node)) {
   if (nrow(node_row) != 1) next
   is_tip <- node_row$isTip
   
-  # Ensure deterministic order (Red, Blue, Green, Yellow...)
-  color_order <- c("red", "blue", "#00B050", "#FFC000", "#800080", "#FF8C00", "black")
-  idx <- idx[order(match(label_entries$color[idx], color_order))]
-  
   for (k in seq_along(idx)) {
     i <- idx[k]
     source_i <- label_entries$source[i]
@@ -226,24 +235,18 @@ for (node_n in unique(label_entries$node)) {
     if (!is.null(y_positions)) {
       
       if (is_tip) {
-        # Tips grow downwards (smaller Y is lower)
         if (k %% 2 == 1) {
-          # Odd blocks (1st, 3rd): Anchor at bottom of block, text grows up
           label_entries$label_y[i] <- min(y_positions)
           label_entries$vjust_val[i] <- 1 
         } else {
-          # Even blocks (2nd, 4th): Anchor at top of block, text grows down
           label_entries$label_y[i] <- max(y_positions)
           label_entries$vjust_val[i] <- 0 
         }
       } else {
-        # Internal nodes grow upwards (larger Y is higher)
         if (k %% 2 == 1) {
-          # Odd blocks: Anchor at top of block, text grows down
           label_entries$label_y[i] <- max(y_positions)
           label_entries$vjust_val[i] <- 0 
         } else {
-          # Even blocks: Anchor at bottom of block, text grows up
           label_entries$label_y[i] <- min(y_positions)
           label_entries$vjust_val[i] <- 1 
         }
@@ -265,18 +268,11 @@ label_entries <- label_entries %>%
   mutate(internal_label_x = if_else(is.na(parent_x), x, parent_x - 0.08)) %>%
   filter(!is.na(label_y))
 
-# Tip annotations receive their own lane to the right of all species names.
-# Resolve labels vertically in that lane so nearby tips cannot print over each
-# other or over the coloured branch blocks.
-tip_label_lane_x <- max(tree_data_new$x) + 0.85
-tip_label_min_gap <- 0.42
-# Tip labels use a fixed lane outside the tree, while retaining the y-coordinate
-# of their own coloured line block. This keeps each label visually associated
-# with its annotation instead of separating it through a global reflow.
 tip_label_lane_x <- max(tree_data_new$x) + 2.5
 label_entries$tip_label_y <- label_entries$label_y
 label_entries$tip_label_x <- if_else(label_entries$isTip, tip_label_lane_x, NA_real_)
 
+tip_label_min_gap <- 0.42
 tip_indices <- which(label_entries$isTip)
 if (length(tip_indices) > 1) {
   ordered_tip_indices <- tip_indices[order(label_entries$label_y[tip_indices])]
@@ -295,9 +291,8 @@ if (nrow(label_internal) > 0) {
     geom_text(data = label_internal,
               aes(x = internal_label_x, y = label_y,
                   label = annotation_label, color = color),
-              # Use the calculated vjust to push text away from the lines
               vjust = label_internal$vjust_val,
-              hjust = 1, size = 7.76, inherit.aes = FALSE) +
+              hjust = 1, size = 7.76,fontface = "bold", inherit.aes = FALSE) +
     scale_color_identity()
 }
 if (nrow(label_tips) > 0) {
@@ -305,15 +300,14 @@ if (nrow(label_tips) > 0) {
     geom_text(data = label_tips,
               aes(x = tip_label_x, y = tip_label_y,
                   label = annotation_label, color = color),
-              hjust = 0, vjust = 0.5, size = 7.76, inherit.aes = FALSE) +
+              hjust = 0, vjust = 0.5, size = 7.76,fontface = "bold", inherit.aes = FALSE) +
     scale_color_identity()
 }
-# Calculate limits and preserve the original rendering and labels.
+
 min_x <- min(tree_data_new$x)
 max_x <- max(tree_data_new$x)
 min_y <- min(tree_data_new$y, label_entries$tip_label_y, na.rm = TRUE)
 max_y <- max(tree_data_new$y, label_entries$tip_label_y, na.rm = TRUE)
-margin_x <- 5
 margin_x <- 4.5
 margin_y <- 1.5
 
@@ -322,6 +316,7 @@ tree_plot_new <- tree_plot_new +
   scale_y_reverse(limits = c(max_y + margin_y, min_y - margin_y)) +
   geom_tree(color = "black", size = 1) +
   scale_color_identity()
+
 print(tree_plot_new)
 
 # Save directly to the images/ folder for the GitHub app to retrieve
